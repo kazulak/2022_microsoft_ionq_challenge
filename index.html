@@ -78,6 +78,12 @@
                 <h3>Quantum Gates</h3>
                 <p class="panel-desc">Apply gates to rotate the active qubit state vector.</p>
                 
+                <div class="qubit-selector-container" id="qubit-selector-container" style="display: none;">
+                    <span>Target:</span>
+                    <button class="selector-btn active" id="sel-qubit-1" title="Select Left Qubit">Left (Q1)</button>
+                    <button class="selector-btn" id="sel-qubit-2" title="Select Right Qubit">Right (Q2)</button>
+                </div>
+                
                 <div class="gate-grid">
                     <div class="gate-group">
                         <span class="group-label">1-Qubit Gates</span>
@@ -126,6 +132,10 @@
                         <span class="control-key">↓</span>
                         <span class="control-desc">Fast Fall</span>
                     </div>
+                    <div class="control-row">
+                        <span class="control-key">Tab / Q</span>
+                        <span class="control-desc">Switch Target Qubit</span>
+                    </div>
                 </div>
             </section>
         </main>
@@ -160,6 +170,7 @@
                             <li><strong>Z Gate (Key Z)</strong>: Pauli-Z flips the phase (negates the |1⟩ coefficient).</li>
                             <li><strong>H Gate (Key H)</strong>: Hadamard gate creates/destroys superposition (rotates the arrow by 45°).</li>
                             <li><strong>CX / CZ / CH</strong>: Entangle and swap states on 2-qubit blocks.</li>
+                            <li><strong>Switch Target (Tab / Q)</strong>: For 2-qubit blocks, toggle gate target between Left (Q1) and Right (Q2), marked by a pulsing white ring.</li>
                         </ul>
                     </div>
                 </div>

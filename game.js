@@ -225,6 +225,7 @@ class GameState {
         this.points = 0;
         this.difficulty = 0.7; // fall interval in seconds (lower is harder)
         this.isGameOver = false;
+        this.activeQubitIndex = 1; // Target qubit for 1-qubit gates on 2-qubit blocks (1 = Left, 2 = Right)
 
         // Generate initial pool of upcoming blocks
         const number_of_initial_blocks = 10;
@@ -258,24 +259,41 @@ class GameState {
             if (numQubits === 1) {
                 newState = [oldState[1], oldState[0]];
             } else {
-                newState = [oldState[2], oldState[3], oldState[0], oldState[1]];
+                if (this.activeQubitIndex === 1) {
+                    newState = [oldState[2], oldState[3], oldState[0], oldState[1]];
+                } else {
+                    newState = [oldState[1], oldState[0], oldState[3], oldState[2]];
+                }
             }
         } else if (gate === 'z') {
             if (numQubits === 1) {
                 newState = [oldState[0], -oldState[1]];
             } else {
-                newState = [oldState[0], oldState[1], -oldState[2], -oldState[3]];
+                if (this.activeQubitIndex === 1) {
+                    newState = [oldState[0], oldState[1], -oldState[2], -oldState[3]];
+                } else {
+                    newState = [oldState[0], -oldState[1], oldState[2], -oldState[3]];
+                }
             }
         } else if (gate === 'h') {
             if (numQubits === 1) {
                 newState = [(oldState[0] + oldState[1]) / sqrt2, (oldState[0] - oldState[1]) / sqrt2];
             } else {
-                newState = [
-                    (oldState[0] + oldState[2]) / sqrt2,
-                    (oldState[1] + oldState[3]) / sqrt2,
-                    (oldState[0] - oldState[2]) / sqrt2,
-                    (oldState[1] - oldState[3]) / sqrt2
-                ];
+                if (this.activeQubitIndex === 1) {
+                    newState = [
+                        (oldState[0] + oldState[2]) / sqrt2,
+                        (oldState[1] + oldState[3]) / sqrt2,
+                        (oldState[0] - oldState[2]) / sqrt2,
+                        (oldState[1] - oldState[3]) / sqrt2
+                    ];
+                } else {
+                    newState = [
+                        (oldState[0] + oldState[1]) / sqrt2,
+                        (oldState[0] - oldState[1]) / sqrt2,
+                        (oldState[2] + oldState[3]) / sqrt2,
+                        (oldState[2] - oldState[3]) / sqrt2
+                    ];
+                }
             }
         } else if (gate === 'cx') {
             if (numQubits === 2) {
@@ -322,6 +340,7 @@ class GameState {
                 this.points += 1;
                 this.blocks.push(this.upcomingBlocks.shift());
                 this.ensureUpcomingBlocks();
+                this.activeQubitIndex = 1;
             }
         }
     }
@@ -346,6 +365,7 @@ class GameState {
                 this.points += 1;
                 this.blocks.push(this.upcomingBlocks.shift());
                 this.ensureUpcomingBlocks();
+                this.activeQubitIndex = 1;
             }
         }
     }
@@ -366,6 +386,7 @@ class GameState {
             this.blocks = res.blocks;
             this.blocks.push(this.upcomingBlocks.shift());
             this.blocks[this.blocks.length - 1].position[1] -= 1;
+            this.activeQubitIndex = 1;
         } else {
             // Check if they cancel two moves ahead
             activeBlock.position[1] -= 1;
@@ -375,6 +396,7 @@ class GameState {
                 this.blocks = res.blocks;
                 this.blocks.push(this.upcomingBlocks.shift());
                 this.blocks[this.blocks.length - 1].position[1] -= 1;
+                this.activeQubitIndex = 1;
             } else {
                 // Undo the second fall
                 activeBlock.position[1] += 1;
@@ -391,6 +413,7 @@ class GameState {
             activeBlock.position[1] += 1;
             this.blocks.push(this.upcomingBlocks.shift());
             this.ensureUpcomingBlocks();
+            this.activeQubitIndex = 1;
         }
     }
 }
@@ -650,14 +673,25 @@ function drawBlock(block, isActive = false) {
 
         // Connect line (entanglement line)
         ctx.save();
-        // The line glows brighter if the qubits are highly entangled (low purity)
         const avgPurity = (q1Info.purity + q2Info.purity) / 2;
         const entanglementStrength = 1 - avgPurity;
-        ctx.strokeStyle = `rgba(155, 93, 229, ${0.3 + entanglementStrength * 0.5})`;
-        ctx.lineWidth = 2.5 + entanglementStrength * 2.0;
-        ctx.setLineDash([4, 4]);
-        ctx.shadowColor = 'rgba(155, 93, 229, 0.6)';
-        ctx.shadowBlur = 6 + entanglementStrength * 6;
+        
+        // Background thick energy glow capsule (fades/brightens with entanglement)
+        ctx.strokeStyle = `rgba(155, 93, 229, ${0.08 + entanglementStrength * 0.28})`;
+        ctx.lineWidth = 14;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(c1.x, c1.y);
+        ctx.lineTo(c2.x, c2.y);
+        ctx.stroke();
+
+        // Inner dynamic flowing dashed line (moving ants effect)
+        ctx.strokeStyle = `rgba(155, 93, 229, ${0.45 + entanglementStrength * 0.45})`;
+        ctx.lineWidth = 3.5 + entanglementStrength * 2.0;
+        ctx.setLineDash([6, 6]);
+        ctx.lineDashOffset = - (Date.now() / 35) % 24; // dynamically updates over time
+        ctx.shadowColor = '#9b5de5';
+        ctx.shadowBlur = 4 + entanglementStrength * 8;
         ctx.beginPath();
         ctx.moveTo(c1.x, c1.y);
         ctx.lineTo(c2.x, c2.y);
@@ -683,6 +717,22 @@ function drawBlock(block, isActive = false) {
         ctx.shadowBlur = isActive ? 12 : 6;
         ctx.fill();
         ctx.restore();
+
+        // Active qubit target outline (golden pulsing halo)
+        if (isActive && gameState) {
+            const targetCenter = gameState.activeQubitIndex === 1 ? c1 : c2;
+            const targetColor = gameState.activeQubitIndex === 1 ? color1 : color2;
+            ctx.save();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2.5;
+            ctx.shadowColor = targetColor;
+            ctx.shadowBlur = 10;
+            const pulse = 11 + Math.sin(Date.now() / 120) * 2;
+            ctx.beginPath();
+            ctx.arc(targetCenter.x, targetCenter.y, pulse, 0, 2 * Math.PI);
+            ctx.stroke();
+            ctx.restore();
+        }
 
         // Arrow targets scale/shrink with purity
         const target1X = c1.x + q1Info.dir[0] * q1Info.purity * CELL_SIZE;
@@ -725,6 +775,15 @@ function drawGame() {
         document.getElementById('gate-cx').disabled = !isTwoQubits;
         document.getElementById('gate-cz').disabled = !isTwoQubits;
         document.getElementById('gate-ch').disabled = !isTwoQubits;
+
+        const selectorEl = document.getElementById('qubit-selector-container');
+        if (isTwoQubits && !gameState.isGameOver) {
+            selectorEl.style.display = 'flex';
+            document.getElementById('sel-qubit-1').classList.toggle('active', gameState.activeQubitIndex === 1);
+            document.getElementById('sel-qubit-2').classList.toggle('active', gameState.activeQubitIndex === 2);
+        } else {
+            selectorEl.style.display = 'none';
+        }
     }
 
     renderPreviews();
@@ -871,15 +930,16 @@ function tick(time) {
 
     if (progress >= gameState.difficulty) {
         gameState.update();
-        drawGame();
         lastTickTime = time;
 
         if (gameState.isGameOver) {
+            drawGame();
             showGameOver();
             return;
         }
     }
 
+    drawGame(); // Redraw on every animation frame for continuous animations
     gameLoopId = requestAnimationFrame(tick);
 }
 
@@ -927,6 +987,20 @@ document.querySelectorAll('.gate-btn').forEach(btn => {
     });
 });
 
+// Target Qubit Selector Buttons
+document.getElementById('sel-qubit-1').addEventListener('click', () => {
+    if (gameState && !gameState.isGameOver) {
+        gameState.activeQubitIndex = 1;
+        drawGame();
+    }
+});
+document.getElementById('sel-qubit-2').addEventListener('click', () => {
+    if (gameState && !gameState.isGameOver) {
+        gameState.activeQubitIndex = 2;
+        drawGame();
+    }
+});
+
 // Keyboard controls
 window.addEventListener('keydown', (e) => {
     if (!gameState || gameState.isGameOver) return;
@@ -959,6 +1033,10 @@ window.addEventListener('keydown', (e) => {
         drawGame();
     } else if (key === 'a') { // CZ
         gameState.handleGateAction('cz');
+        drawGame();
+    } else if (key === 'q' || key === 'tab') {
+        e.preventDefault();
+        gameState.activeQubitIndex = (gameState.activeQubitIndex === 1) ? 2 : 1;
         drawGame();
     }
 });

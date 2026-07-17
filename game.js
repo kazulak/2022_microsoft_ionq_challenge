@@ -453,23 +453,88 @@ function drawArrow(x1, y1, x2, y2, color, isDouble = false) {
     ctx.restore();
 }
 
+function drawRoundedRect(ctx, x, y, width, height, radius) {
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+    ctx.lineTo(x + width, y + height - radius);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    ctx.lineTo(x + radius, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.closePath();
+}
+
+function drawGhostBlock(block) {
+    if (!block) return;
+    const ghost = new Block(block.numQubits, block.stateVector, [...block.position]);
+    const tempBlocks = [...gameState.blocks];
+    const activeIdx = tempBlocks.length - 1;
+
+    while (true) {
+        ghost.position[1] -= 1;
+        tempBlocks[activeIdx] = ghost;
+        if (checkOverlap(tempBlocks)) {
+            ghost.position[1] += 1;
+            break;
+        }
+    }
+
+    const squares = ghost.getCoveredSquares();
+    const qState = ghost.stateVector;
+    
+    ctx.save();
+    ctx.globalAlpha = 0.35;
+    ctx.setLineDash([4, 4]);
+
+    for (const sq of squares) {
+        const color = block.numQubits === 1 ? getQubitColor(qState) : '#bd00ff';
+        ctx.strokeStyle = color;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+        ctx.lineWidth = 1.5;
+        
+        const pad = 2;
+        drawRoundedRect(ctx, sq[0] * CELL_SIZE + pad, (19 - sq[1]) * CELL_SIZE + pad, CELL_SIZE - pad*2, CELL_SIZE - pad*2, 6);
+        ctx.fill();
+        ctx.stroke();
+    }
+    ctx.restore();
+}
+
 function drawBlock(block, isActive = false) {
     const x = block.position[0];
     const y = block.position[1];
+    const sqs = block.getCoveredSquares();
 
     if (block.numQubits === 1) {
-        const center = getCellCenter(x, y);
         const qState = block.stateVector;
+        const color = getQubitColor(qState);
+        const fillCol = color.replace('hsl', 'hsla').replace(')', ', 0.16)');
+
+        for (const sq of sqs) {
+            ctx.save();
+            ctx.fillStyle = fillCol;
+            ctx.strokeStyle = color;
+            ctx.lineWidth = isActive ? 2 : 1;
+            if (isActive) {
+                ctx.shadowColor = color;
+                ctx.shadowBlur = 6;
+            }
+            const pad = 2;
+            drawRoundedRect(ctx, sq[0] * CELL_SIZE + pad, (19 - sq[1]) * CELL_SIZE + pad, CELL_SIZE - pad*2, CELL_SIZE - pad*2, 6);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        const center = getCellCenter(x, y);
         const arrowDir = [qState[0], qState[1]];
-        
-        // Calculate target location based on arrow direction
         const arrowLength = CELL_SIZE - 6;
         const targetX = center.x + arrowDir[0] * arrowLength;
-        const targetY = center.y - arrowDir[1] * arrowLength; // minus because canvas Y grows downwards
-        
-        const color = getQubitColor(qState);
+        const targetY = center.y - arrowDir[1] * arrowLength;
 
-        // Qubit center dot
         ctx.save();
         ctx.beginPath();
         ctx.arc(center.x, center.y, 6, 0, 2 * Math.PI);
@@ -479,14 +544,9 @@ function drawBlock(block, isActive = false) {
         ctx.fill();
         ctx.restore();
 
-        // Arrow
-        const isHadamard = Math.abs(qState[0] * qState[1]) > 0.1; // check if diagonal
+        const isHadamard = Math.abs(qState[0] * qState[1]) > 0.1;
         drawArrow(center.x, center.y, targetX, targetY, color, isHadamard);
     } else {
-        // 2 Qubits
-        const c1 = getCellCenter(x, y);
-        const c2 = getCellCenter(x + 2, y);
-
         const q1 = [
             block.stateVector[0] + block.stateVector[1],
             block.stateVector[2] + block.stateVector[3]
@@ -498,8 +558,46 @@ function drawBlock(block, isActive = false) {
 
         const color1 = getQubitColor(q1);
         const color2 = getQubitColor(q2);
+        const fillCol1 = color1.replace('hsl', 'hsla').replace(')', ', 0.16)');
+        const fillCol2 = color2.replace('hsl', 'hsla').replace(')', ', 0.16)');
 
-        // Connect line (entanglement line)
+        for (let i = 0; i < 2; i++) {
+            const sq = sqs[i];
+            ctx.save();
+            ctx.fillStyle = fillCol1;
+            ctx.strokeStyle = color1;
+            ctx.lineWidth = isActive ? 2 : 1;
+            if (isActive) {
+                ctx.shadowColor = color1;
+                ctx.shadowBlur = 6;
+            }
+            const pad = 2;
+            drawRoundedRect(ctx, sq[0] * CELL_SIZE + pad, (19 - sq[1]) * CELL_SIZE + pad, CELL_SIZE - pad*2, CELL_SIZE - pad*2, 6);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        for (let i = 2; i < 4; i++) {
+            const sq = sqs[i];
+            ctx.save();
+            ctx.fillStyle = fillCol2;
+            ctx.strokeStyle = color2;
+            ctx.lineWidth = isActive ? 2 : 1;
+            if (isActive) {
+                ctx.shadowColor = color2;
+                ctx.shadowBlur = 6;
+            }
+            const pad = 2;
+            drawRoundedRect(ctx, sq[0] * CELL_SIZE + pad, (19 - sq[1]) * CELL_SIZE + pad, CELL_SIZE - pad*2, CELL_SIZE - pad*2, 6);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        const c1 = getCellCenter(x, y);
+        const c2 = getCellCenter(x + 2, y);
+
         ctx.save();
         ctx.strokeStyle = 'rgba(189, 0, 255, 0.4)';
         ctx.lineWidth = 2.5;
@@ -512,7 +610,6 @@ function drawBlock(block, isActive = false) {
         ctx.stroke();
         ctx.restore();
 
-        // Qubit 1
         ctx.save();
         ctx.beginPath();
         ctx.arc(c1.x, c1.y, 6, 0, 2 * Math.PI);
@@ -522,7 +619,6 @@ function drawBlock(block, isActive = false) {
         ctx.fill();
         ctx.restore();
 
-        // Qubit 2
         ctx.save();
         ctx.beginPath();
         ctx.arc(c2.x, c2.y, 6, 0, 2 * Math.PI);
@@ -532,7 +628,6 @@ function drawBlock(block, isActive = false) {
         ctx.fill();
         ctx.restore();
 
-        // Arrows
         const arrowLength = CELL_SIZE - 6;
         
         const target1X = c1.x + q1[0] * arrowLength;
@@ -552,13 +647,16 @@ function drawGame() {
 
     if (!gameState) return;
 
-    // Draw all blocks on board
+    const activeBlock = gameState.blocks[gameState.blocks.length - 1];
+    if (activeBlock && !gameState.isGameOver) {
+        drawGhostBlock(activeBlock);
+    }
+
     for (let i = 0; i < gameState.blocks.length; i++) {
         const isActive = (i === gameState.blocks.length - 1);
         drawBlock(gameState.blocks[i], isActive);
     }
 
-    // Update Score Board and Panels
     document.getElementById('score-val').innerText = gameState.points;
     if (gameState.points > highscore) {
         highscore = gameState.points;
@@ -567,8 +665,6 @@ function drawGame() {
     document.getElementById('high-score-val').innerText = highscore;
     document.getElementById('difficulty-val').innerText = (1 / gameState.difficulty).toFixed(2);
 
-    // Disable gates based on active block qubit count
-    const activeBlock = gameState.blocks[gameState.blocks.length - 1];
     if (activeBlock) {
         const isTwoQubits = (activeBlock.numQubits === 2);
         document.getElementById('gate-cx').disabled = !isTwoQubits;
@@ -576,7 +672,6 @@ function drawGame() {
         document.getElementById('gate-ch').disabled = !isTwoQubits;
     }
 
-    // Draw Preview Slots
     renderPreviews();
 }
 

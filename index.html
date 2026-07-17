@@ -140,33 +140,53 @@
             </div>
             <div class="modal-body">
                 <h3>The Core Concept</h3>
-                <p>In Quantum Tetris, the falling blocks are <strong>qubits</strong>. Instead of filling rows, your goal is to make falling blocks <strong>destructively interfere</strong> with blocks already on the board to clear them.</p>
+                <p>In Quantum Tetris, blocks represent <strong>qubits</strong>. Instead of clearing horizontal rows like in traditional Tetris, your goal is to clear blocks by creating <strong>destructive quantum interference</strong> between the falling active block and stationary blocks already on the board.</p>
                 
                 <div class="modal-grid">
                     <div>
-                        <h4>Qubits & Arrow Rotations</h4>
-                        <p>Qubit states are represented by arrows. The horizontal axis represents the $|0\rangle$ state, and the vertical axis represents $|1\rangle$.</p>
+                        <h4>1. Qubit Shapes & Grid Alignment</h4>
+                        <p>A block is comprised of a <strong>Qubit Center</strong> (a glowing circle) and an <strong>Arrow</strong> indicating its state. The block physically occupies both the center cell and the target cell the arrow points to:</p>
                         <ul>
-                            <li><strong>Arrow Right</strong>: $|0\rangle$ state</li>
-                            <li><strong>Arrow Up</strong>: $|1\rangle$ state</li>
-                            <li><strong>Arrow Diagonal</strong>: Superposition state (e.g. $\frac{1}{\sqrt{2}}(|0\rangle + |1\rangle)$)</li>
+                            <li><strong>Arrow Right (Cyan)</strong>: state $|0\rangle$. Covers the center and the cell to its right.</li>
+                            <li><strong>Arrow Up (Blue)</strong>: state $|1\rangle$. Covers the center and the cell above it.</li>
+                            <li><strong>Arrow Diagonal (Purple)</strong>: Superposition state. Covers the center and the cell diagonal to it.</li>
                         </ul>
                     </div>
                     <div>
-                        <h4>Quantum Gates</h4>
-                        <p>Use the gate buttons or keyboard shortcuts to manipulate the active falling qubit's state:</p>
+                        <h4>2. Applying Quantum Gates</h4>
+                        <p>Use keyboard keys or click the gate buttons to rotate/manipulate the falling block's state and physically change its shape:</p>
                         <ul>
-                            <li><strong>X Gate (Key X)</strong>: Flips the state (NOT operation).</li>
-                            <li><strong>Z Gate (Key Z)</strong>: Phase flip.</li>
-                            <li><strong>H Gate (Key H)</strong>: Puts the qubit in superposition (45° rotation).</li>
-                            <li><strong>CX / CZ / CH</strong>: Entangle 2-qubit blocks.</li>
+                            <li><strong>X Gate (Key X)</strong>: Pauli-X flips the state. (NOT operation, e.g., swaps $|0\rangle \leftrightarrow |1\rangle$).</li>
+                            <li><strong>Z Gate (Key Z)</strong>: Pauli-Z flips the phase (negates the $|1\rangle$ coefficient).</li>
+                            <li><strong>H Gate (Key H)</strong>: Hadamard gate creates/destroys superposition (rotates the arrow by 45°).</li>
+                            <li><strong>CX / CZ / CH</strong>: Entangle and swap states on 2-qubit blocks.</li>
                         </ul>
                     </div>
                 </div>
 
+                <div class="modal-section">
+                    <h4>💥 How to Clear Blocks (Interference Examples)</h4>
+                    <p>To clear blocks, you must land your active block on top of a stationary block such that they occupy the <strong>exact same squares</strong>, and their state vectors are <strong>opposite (cancelling out)</strong>, meaning $v_{\text{active}} = -v_{\text{board}}$ (out of phase by 180°).</p>
+                    
+                    <div class="example-box">
+                        <div class="example-item">
+                            <h5>Example 1: Cancelling $|0\rangle$ (Horizontal Qubits)</h5>
+                            <p>A stationary block is on the board in the $-|0\rangle$ state (arrow pointing <strong>Left</strong> $\leftarrow$). To cancel it, make your falling block point <strong>Right</strong> $\rightarrow$ ($+|0\rangle$) and land it on the same coordinates. They will cancel and both vanish!</p>
+                        </div>
+                        <div class="example-item">
+                            <h5>Example 2: Phase Flipping for $|1\rangle$ (Vertical Qubits)</h5>
+                            <p>A stationary block is on the board in the $|1\rangle$ state (arrow pointing <strong>Up</strong> $\uparrow$). If your falling block is also in the $|1\rangle$ state ($\uparrow$), they will not cancel. First press **Z** to flip the falling block's phase to $-|1\rangle$ (arrow pointing <strong>Down</strong> $\downarrow$). When they touch, they will cancel!</p>
+                        </div>
+                        <div class="example-item">
+                            <h5>Example 3: Superposition & Rotations</h5>
+                            <p>Your falling block points <strong>Up-Right</strong> $\nearrow$. Pressing **H** rotates it to point <strong>Right</strong> $\rightarrow$. By combining **H** (45° rotation) and **X** (90° reflection), you can rotate your qubit to point in any of the 8 directions to match and cancel a target.</p>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="interference-tip">
-                    <h4>💥 Destructive Interference (Clearing Blocks)</h4>
-                    <p>When the active block lands on another block of the <strong>same shape/squares</strong>, they will cancel out and disappear <strong>ONLY IF</strong> their state vectors are exactly opposite (out of phase by 180°, i.e., $v_{active} = -v_{board}$). This awards you points!</p>
+                    <h4>💡 Pro Tip: Ghost Block & Block Outlines</h4>
+                    <p>Look at the **Ghost Block** (the dashed outline at the bottom of the grid) to see exactly which cells your block will cover when it lands. Align the shapes first using left/right move keys, then apply quantum gates until the active block's arrows point in the opposite direction of the target block's arrows.</p>
                 </div>
             </div>
         </div>

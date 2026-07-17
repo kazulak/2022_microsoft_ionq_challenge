@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuanTris - Quantum Tetris</title>
+    <!-- Google Fonts for futuristic/tech typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="stars-bg"></div>
+    <div class="glow-orb" id="orb-1"></div>
+    <div class="glow-orb" id="orb-2"></div>
+
+    <div class="app-container">
+        <!-- Header -->
+        <header class="game-header">
+            <h1 class="glow-text">QuanTris</h1>
+            <p class="subtitle">MIT iQuHACK 2022 Quantum Tetris</p>
+        </header>
+
+        <!-- Main Game Layout -->
+        <main class="game-layout">
+            <!-- Left Panel: Stats and Controls -->
+            <section class="panel left-panel glass">
+                <div class="stat-card">
+                    <h3>Score</h3>
+                    <div class="stat-value" id="score-val">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>High Score</h3>
+                    <div class="stat-value" id="high-score-val">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Difficulty</h3>
+                    <div class="stat-value" id="difficulty-val">1.43</div>
+                    <div class="difficulty-controls">
+                        <button class="diff-btn" id="diff-minus" title="Decrease Difficulty">—</button>
+                        <button class="diff-btn" id="diff-plus" title="Increase Difficulty">+</button>
+                    </div>
+                </div>
+
+                <div class="upcoming-container">
+                    <h3>Upcoming Qubits</h3>
+                    <div class="upcoming-slots">
+                        <div class="upcoming-preview-box" id="upcoming-1"></div>
+                        <div class="upcoming-preview-box" id="upcoming-2"></div>
+                        <div class="upcoming-preview-box" id="upcoming-3"></div>
+                    </div>
+                </div>
+
+                <div class="menu-buttons">
+                    <button class="menu-btn secondary" id="btn-how-to">How to Play</button>
+                </div>
+            </section>
+
+            <!-- Center: Game Board Canvas -->
+            <section class="board-container glass">
+                <div class="canvas-wrapper">
+                    <canvas id="game-canvas" width="350" height="700"></canvas>
+                    
+                    <!-- Game Overlay (Start/Pause/Game Over) -->
+                    <div class="overlay" id="game-overlay">
+                        <div class="overlay-content">
+                            <h2 id="overlay-title">Ready to Play?</h2>
+                            <p id="overlay-desc">Control qubits, apply quantum gates, and create destructive interference to clear the board!</p>
+                            <button class="menu-btn primary" id="btn-start">Start Game</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Right Panel: Quantum Gates -->
+            <section class="panel right-panel glass">
+                <h3>Quantum Gates</h3>
+                <p class="panel-desc">Apply gates to rotate the active qubit state vector.</p>
+                
+                <div class="gate-grid">
+                    <div class="gate-group">
+                        <span class="group-label">1-Qubit Gates</span>
+                        <button class="gate-btn" id="gate-x" data-gate="x" title="Pauli X (Not) Gate">
+                            <span class="gate-symbol">X</span>
+                            <span class="key-hint">Key: X</span>
+                        </button>
+                        <button class="gate-btn" id="gate-z" data-gate="z" title="Pauli Z Gate">
+                            <span class="gate-symbol">Z</span>
+                            <span class="key-hint">Key: Z</span>
+                        </button>
+                        <button class="gate-btn" id="gate-h" data-gate="h" title="Hadamard (Superposition) Gate">
+                            <span class="gate-symbol">H</span>
+                            <span class="key-hint">Key: H</span>
+                        </button>
+                    </div>
+
+                    <div class="gate-group">
+                        <span class="group-label">2-Qubit Gates</span>
+                        <button class="gate-btn double" id="gate-cx" data-gate="cx" title="Controlled-X (CNOT) Gate">
+                            <span class="gate-symbol">CX</span>
+                            <span class="key-hint">Key: S</span>
+                        </button>
+                        <button class="gate-btn double" id="gate-cz" data-gate="cz" title="Controlled-Z Gate">
+                            <span class="gate-symbol">CZ</span>
+                            <span class="key-hint">Key: A</span>
+                        </button>
+                        <button class="gate-btn double" id="gate-ch" data-gate="ch" title="Controlled-Hadamard Gate">
+                            <span class="gate-symbol">CH</span>
+                            <span class="key-hint">Click only</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="keyboard-controls">
+                    <h4>Move Controls</h4>
+                    <div class="control-row">
+                        <span class="control-key">←</span>
+                        <span class="control-desc">Move Left</span>
+                    </div>
+                    <div class="control-row">
+                        <span class="control-key">→</span>
+                        <span class="control-desc">Move Right</span>
+                    </div>
+                    <div class="control-row">
+                        <span class="control-key">↓</span>
+                        <span class="control-desc">Fast Fall</span>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Help Modal -->
+    <div class="modal-backdrop" id="how-to-modal">
+        <div class="modal glass">
+            <div class="modal-header">
+                <h2>How to Play QuanTris</h2>
+                <button class="close-btn" id="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <h3>The Core Concept</h3>
+                <p>In Quantum Tetris, the falling blocks are <strong>qubits</strong>. Instead of filling rows, your goal is to make falling blocks <strong>destructively interfere</strong> with blocks already on the board to clear them.</p>
+                
+                <div class="modal-grid">
+                    <div>
+                        <h4>Qubits & Arrow Rotations</h4>
+                        <p>Qubit states are represented by arrows. The horizontal axis represents the $|0\rangle$ state, and the vertical axis represents $|1\rangle$.</p>
+                        <ul>
+                            <li><strong>Arrow Right</strong>: $|0\rangle$ state</li>
+                            <li><strong>Arrow Up</strong>: $|1\rangle$ state</li>
+                            <li><strong>Arrow Diagonal</strong>: Superposition state (e.g. $\frac{1}{\sqrt{2}}(|0\rangle + |1\rangle)$)</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4>Quantum Gates</h4>
+                        <p>Use the gate buttons or keyboard shortcuts to manipulate the active falling qubit's state:</p>
+                        <ul>
+                            <li><strong>X Gate (Key X)</strong>: Flips the state (NOT operation).</li>
+                            <li><strong>Z Gate (Key Z)</strong>: Phase flip.</li>
+                            <li><strong>H Gate (Key H)</strong>: Puts the qubit in superposition (45° rotation).</li>
+                            <li><strong>CX / CZ / CH</strong>: Entangle 2-qubit blocks.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="interference-tip">
+                    <h4>💥 Destructive Interference (Clearing Blocks)</h4>
+                    <p>When the active block lands on another block of the <strong>same shape/squares</strong>, they will cancel out and disappear <strong>ONLY IF</strong> their state vectors are exactly opposite (out of phase by 180°, i.e., $v_{active} = -v_{board}$). This awards you points!</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>

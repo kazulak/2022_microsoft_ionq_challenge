@@ -334,13 +334,15 @@ class Board:
         pygame.draw.rect(gameDisplay, 'purple', pygame.Rect(
             23, 100, 230, 300), 2, border_radius=10)
 
-        font2 = pygame.font.Font(
-            'freesansbold.ttf', 40, bold=True, italic=True)
+        font2 = pygame.font.Font('freesansbold.ttf', 40)
+        font2.set_bold(True)
+        font2.set_italic(True)
         text3 = font2.render('QuanTris', True, 'red')
         gameDisplay.blit(text3, (370, 55))
 
-        font3 = pygame.font.Font(
-            'freesansbold.ttf', 24, bold=True, italic=True)
+        font3 = pygame.font.Font('freesansbold.ttf', 24)
+        font3.set_bold(True)
+        font3.set_italic(True)
 
         difficulty_text = font3.render(
             f'Difficulty: {1/self.difficulty:.2f}', True, 'red')

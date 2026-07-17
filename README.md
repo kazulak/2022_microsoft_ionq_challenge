@@ -4,6 +4,20 @@ Developed for MIT IQUHACK 2022
 
 Presented by QuanTris: `Caspian Chaharom, Danai Bili, Frederik Hardervig, Sneha Shakya, Tomasz Kazulak`
 
+---
+
+## 🤖 Repository Maintenance & Structure (Agentic AI)
+
+This repository is maintained and modernized using **agentic AI (Antigravity)**. The project has been structured into the following Git branches:
+
+1. **`submitted-version`**: The original, unmodified version of the game as submitted to MIT iQuHACK 2022.
+2. **`runnable-minimal`**: The game with minimal modifications to make it run and not crash on modern environments (Python 3.10+ and pygame 2.x).
+3. **`development`**: The branch dedicated to further local development, advanced features, and enhancements.
+4. **`browser-game`**: The branch dedicated to adapting the game to run fully in the browser (client-side) for deployment to GitHub Pages.
+
+---
+
+
 ## Game Rules and Goal
 
 In this game your blocks are Qubits, and you must make them destructively interfere to get rid of them.

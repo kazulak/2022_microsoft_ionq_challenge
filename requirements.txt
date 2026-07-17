@@ -1,6 +1,7 @@
-QuanTris REQUIREMENTS
---------------------
+# QuanTris REQUIREMENTS
+# --------------------
 
-pygame == 1.9.2 
-numpy == 1.21.2
+pygame >= 2.0.0
+numpy >= 1.21.0
+
 

@@ -36,7 +36,37 @@ function getQubitColor(stateVector) {
     if (deg < 0) deg += 360;
     // Offset by 180 so |0> is cyan
     const hue = (deg + 180) % 360;
-    return `hsl(${hue}, 100%, 60%)`;
+    return `hsl(${hue}, 80%, 48%)`;
+}
+
+function getReducedState(state, qubitIndex) {
+    let z, x;
+    if (qubitIndex === 1) {
+        // Qubit 1 (first qubit)
+        const p0 = state[0]*state[0] + state[1]*state[1];
+        const p1 = state[2]*state[2] + state[3]*state[3];
+        const coh = state[0]*state[2] + state[1]*state[3];
+        z = p0 - p1;
+        x = 2 * coh;
+    } else {
+        // Qubit 2 (second qubit)
+        const p0 = state[0]*state[0] + state[2]*state[2];
+        const p1 = state[1]*state[1] + state[3]*state[3];
+        const coh = state[0]*state[1] + state[2]*state[3];
+        z = p0 - p1;
+        x = 2 * coh;
+    }
+    
+    const r = Math.sqrt(x*x + z*z);
+    
+    // Find Bloch angle
+    let blochAngle = Math.atan2(x, z);
+    let stateAngle = blochAngle / 2;
+    
+    return {
+        dir: [Math.cos(stateAngle), Math.sin(stateAngle)],
+        purity: r
+    };
 }
 
 function squaresEqual(sqs1, sqs2) {
@@ -118,17 +148,11 @@ class Block {
                 [x + arrowDir[0], y + arrowDir[1]]
             ];
         } else {
-            const q1 = [
-                this.stateVector[0] + this.stateVector[1],
-                this.stateVector[2] + this.stateVector[3]
-            ];
-            const q2 = [
-                this.stateVector[0] + this.stateVector[2],
-                this.stateVector[1] + this.stateVector[3]
-            ];
+            const q1Info = getReducedState(this.stateVector, 1);
+            const q2Info = getReducedState(this.stateVector, 2);
 
-            const arrow1Dir = [Math.round(q1[0]), Math.round(q1[1])];
-            const arrow2Dir = [Math.round(q2[0]), Math.round(q2[1])];
+            const arrow1Dir = [Math.round(q1Info.dir[0]), Math.round(q1Info.dir[1])];
+            const arrow2Dir = [Math.round(q2Info.dir[0]), Math.round(q2Info.dir[1])];
 
             return [
                 [x, y],
@@ -415,11 +439,13 @@ function drawGrid() {
     }
 }
 
-function drawArrow(x1, y1, x2, y2, color, isDouble = false) {
+function drawArrow(x1, y1, x2, y2, color, isDouble = false, opacity = 1.0) {
+    if (opacity < 0.1) return; // Don't draw if nearly invisible
     ctx.save();
+    ctx.globalAlpha = opacity;
     ctx.strokeStyle = color;
     ctx.fillStyle = color;
-    ctx.lineWidth = 3.5;
+    ctx.lineWidth = 4.5; // Thicker arrow line for visibility
     ctx.lineCap = 'round';
 
     // Shadow glow
@@ -432,21 +458,24 @@ function drawArrow(x1, y1, x2, y2, color, isDouble = false) {
     ctx.lineTo(x2, y2);
     ctx.stroke();
 
-    // Arrow Head
-    const angle = Math.atan2(y2 - y1, x2 - x1);
-    const headLength = 10;
+    // Arrow Head (only draw if the arrow has sufficient length/purity)
+    const length = Math.sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
+    if (length > 10) {
+        const angle = Math.atan2(y2 - y1, x2 - x1);
+        const headLength = 12; // Larger arrowhead
 
-    ctx.beginPath();
-    ctx.moveTo(x2, y2);
-    ctx.lineTo(x2 - headLength * Math.cos(angle - Math.PI / 6), y2 - headLength * Math.sin(angle - Math.PI / 6));
-    ctx.lineTo(x2 - headLength * Math.cos(angle + Math.PI / 6), y2 - headLength * Math.sin(angle + Math.PI / 6));
-    ctx.closePath();
-    ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(x2, y2);
+        ctx.lineTo(x2 - headLength * Math.cos(angle - Math.PI / 6), y2 - headLength * Math.sin(angle - Math.PI / 6));
+        ctx.lineTo(x2 - headLength * Math.cos(angle + Math.PI / 6), y2 - headLength * Math.sin(angle + Math.PI / 6));
+        ctx.closePath();
+        ctx.fill();
+    }
 
-    if (isDouble) {
+    if (isDouble && length > 12) {
         // Draw Hadamard marker (circle on arrow shaft)
         ctx.beginPath();
-        ctx.arc((x1 + x2) / 2, (y1 + y2) / 2, 4, 0, 2 * Math.PI);
+        ctx.arc((x1 + x2) / 2, (y1 + y2) / 2, 4.5, 0, 2 * Math.PI);
         ctx.fill();
     }
 
@@ -483,22 +512,48 @@ function drawGhostBlock(block) {
     }
 
     const squares = ghost.getCoveredSquares();
-    const qState = ghost.stateVector;
-    
     ctx.save();
-    ctx.globalAlpha = 0.35;
+    ctx.globalAlpha = 0.25;
     ctx.setLineDash([4, 4]);
 
-    for (const sq of squares) {
-        const color = block.numQubits === 1 ? getQubitColor(qState) : '#bd00ff';
-        ctx.strokeStyle = color;
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
-        ctx.lineWidth = 1.5;
-        
-        const pad = 2;
-        drawRoundedRect(ctx, sq[0] * CELL_SIZE + pad, (19 - sq[1]) * CELL_SIZE + pad, CELL_SIZE - pad*2, CELL_SIZE - pad*2, 6);
-        ctx.fill();
-        ctx.stroke();
+    if (block.numQubits === 1) {
+        const qState = block.stateVector;
+        const color = getQubitColor(qState);
+        for (const sq of squares) {
+            ctx.strokeStyle = color;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.015)';
+            ctx.lineWidth = 1.5;
+            const pad = 2;
+            drawRoundedRect(ctx, sq[0] * CELL_SIZE + pad, (19 - sq[1]) * CELL_SIZE + pad, CELL_SIZE - pad*2, CELL_SIZE - pad*2, 6);
+            ctx.fill();
+            ctx.stroke();
+        }
+    } else {
+        const q1Info = getReducedState(block.stateVector, 1);
+        const q2Info = getReducedState(block.stateVector, 2);
+        const color1 = getQubitColor(q1Info.dir);
+        const color2 = getQubitColor(q2Info.dir);
+
+        for (let i = 0; i < 2; i++) {
+            const sq = squares[i];
+            ctx.strokeStyle = color1;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.015)';
+            ctx.lineWidth = 1.5;
+            const pad = 2;
+            drawRoundedRect(ctx, sq[0] * CELL_SIZE + pad, (19 - sq[1]) * CELL_SIZE + pad, CELL_SIZE - pad*2, CELL_SIZE - pad*2, 6);
+            ctx.fill();
+            ctx.stroke();
+        }
+        for (let i = 2; i < 4; i++) {
+            const sq = squares[i];
+            ctx.strokeStyle = color2;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.015)';
+            ctx.lineWidth = 1.5;
+            const pad = 2;
+            drawRoundedRect(ctx, sq[0] * CELL_SIZE + pad, (19 - sq[1]) * CELL_SIZE + pad, CELL_SIZE - pad*2, CELL_SIZE - pad*2, 6);
+            ctx.fill();
+            ctx.stroke();
+        }
     }
     ctx.restore();
 }
@@ -511,13 +566,13 @@ function drawBlock(block, isActive = false) {
     if (block.numQubits === 1) {
         const qState = block.stateVector;
         const color = getQubitColor(qState);
-        const fillCol = color.replace('hsl', 'hsla').replace(')', ', 0.16)');
+        const fillCol = color.replace('hsl', 'hsla').replace(')', ', 0.14)');
 
         for (const sq of sqs) {
             ctx.save();
             ctx.fillStyle = fillCol;
             ctx.strokeStyle = color;
-            ctx.lineWidth = isActive ? 2 : 1;
+            ctx.lineWidth = isActive ? 2.5 : 1.5;
             if (isActive) {
                 ctx.shadowColor = color;
                 ctx.shadowBlur = 6;
@@ -530,43 +585,38 @@ function drawBlock(block, isActive = false) {
         }
 
         const center = getCellCenter(x, y);
-        const arrowDir = [qState[0], qState[1]];
-        const arrowLength = CELL_SIZE - 6;
-        const targetX = center.x + arrowDir[0] * arrowLength;
-        const targetY = center.y - arrowDir[1] * arrowLength;
+        const arrowDir = [Math.round(qState[0]), Math.round(qState[1])];
+        const targetX = center.x + arrowDir[0] * CELL_SIZE;
+        const targetY = center.y - arrowDir[1] * CELL_SIZE;
 
+        // Qubit center dot
         ctx.save();
         ctx.beginPath();
-        ctx.arc(center.x, center.y, 6, 0, 2 * Math.PI);
+        ctx.arc(center.x, center.y, 7, 0, 2 * Math.PI);
         ctx.fillStyle = color;
         ctx.shadowColor = color;
         ctx.shadowBlur = isActive ? 12 : 6;
         ctx.fill();
         ctx.restore();
 
+        // Arrow
         const isHadamard = Math.abs(qState[0] * qState[1]) > 0.1;
-        drawArrow(center.x, center.y, targetX, targetY, color, isHadamard);
+        drawArrow(center.x, center.y, targetX, targetY, color, isHadamard, 1.0);
     } else {
-        const q1 = [
-            block.stateVector[0] + block.stateVector[1],
-            block.stateVector[2] + block.stateVector[3]
-        ];
-        const q2 = [
-            block.stateVector[0] + block.stateVector[2],
-            block.stateVector[1] + block.stateVector[3]
-        ];
+        const q1Info = getReducedState(block.stateVector, 1);
+        const q2Info = getReducedState(block.stateVector, 2);
 
-        const color1 = getQubitColor(q1);
-        const color2 = getQubitColor(q2);
-        const fillCol1 = color1.replace('hsl', 'hsla').replace(')', ', 0.16)');
-        const fillCol2 = color2.replace('hsl', 'hsla').replace(')', ', 0.16)');
+        const color1 = getQubitColor(q1Info.dir);
+        const color2 = getQubitColor(q2Info.dir);
+        const fillCol1 = color1.replace('hsl', 'hsla').replace(')', ', 0.14)');
+        const fillCol2 = color2.replace('hsl', 'hsla').replace(')', ', 0.14)');
 
         for (let i = 0; i < 2; i++) {
             const sq = sqs[i];
             ctx.save();
             ctx.fillStyle = fillCol1;
             ctx.strokeStyle = color1;
-            ctx.lineWidth = isActive ? 2 : 1;
+            ctx.lineWidth = isActive ? 2.5 : 1.5;
             if (isActive) {
                 ctx.shadowColor = color1;
                 ctx.shadowBlur = 6;
@@ -583,7 +633,7 @@ function drawBlock(block, isActive = false) {
             ctx.save();
             ctx.fillStyle = fillCol2;
             ctx.strokeStyle = color2;
-            ctx.lineWidth = isActive ? 2 : 1;
+            ctx.lineWidth = isActive ? 2.5 : 1.5;
             if (isActive) {
                 ctx.shadowColor = color2;
                 ctx.shadowBlur = 6;
@@ -598,47 +648,52 @@ function drawBlock(block, isActive = false) {
         const c1 = getCellCenter(x, y);
         const c2 = getCellCenter(x + 2, y);
 
+        // Connect line (entanglement line)
         ctx.save();
-        ctx.strokeStyle = 'rgba(189, 0, 255, 0.4)';
-        ctx.lineWidth = 2.5;
+        // The line glows brighter if the qubits are highly entangled (low purity)
+        const avgPurity = (q1Info.purity + q2Info.purity) / 2;
+        const entanglementStrength = 1 - avgPurity;
+        ctx.strokeStyle = `rgba(155, 93, 229, ${0.3 + entanglementStrength * 0.5})`;
+        ctx.lineWidth = 2.5 + entanglementStrength * 2.0;
         ctx.setLineDash([4, 4]);
-        ctx.shadowColor = 'rgba(189, 0, 255, 0.5)';
-        ctx.shadowBlur = 6;
+        ctx.shadowColor = 'rgba(155, 93, 229, 0.6)';
+        ctx.shadowBlur = 6 + entanglementStrength * 6;
         ctx.beginPath();
         ctx.moveTo(c1.x, c1.y);
         ctx.lineTo(c2.x, c2.y);
         ctx.stroke();
         ctx.restore();
 
+        // Qubit 1
         ctx.save();
         ctx.beginPath();
-        ctx.arc(c1.x, c1.y, 6, 0, 2 * Math.PI);
+        ctx.arc(c1.x, c1.y, 7, 0, 2 * Math.PI);
         ctx.fillStyle = color1;
         ctx.shadowColor = color1;
         ctx.shadowBlur = isActive ? 12 : 6;
         ctx.fill();
         ctx.restore();
 
+        // Qubit 2
         ctx.save();
         ctx.beginPath();
-        ctx.arc(c2.x, c2.y, 6, 0, 2 * Math.PI);
+        ctx.arc(c2.x, c2.y, 7, 0, 2 * Math.PI);
         ctx.fillStyle = color2;
         ctx.shadowColor = color2;
         ctx.shadowBlur = isActive ? 12 : 6;
         ctx.fill();
         ctx.restore();
 
-        const arrowLength = CELL_SIZE - 6;
-        
-        const target1X = c1.x + q1[0] * arrowLength;
-        const target1Y = c1.y - q1[1] * arrowLength;
-        const isH1 = Math.abs(q1[0] * q1[1]) > 0.1;
-        drawArrow(c1.x, c1.y, target1X, target1Y, color1, isH1);
+        // Arrow targets scale/shrink with purity
+        const target1X = c1.x + q1Info.dir[0] * q1Info.purity * CELL_SIZE;
+        const target1Y = c1.y - q1Info.dir[1] * q1Info.purity * CELL_SIZE;
+        const isH1 = Math.abs(q1Info.dir[0] * q1Info.dir[1]) > 0.1;
+        drawArrow(c1.x, c1.y, target1X, target1Y, color1, isH1, q1Info.purity);
 
-        const target2X = c2.x + q2[0] * arrowLength;
-        const target2Y = c2.y - q2[1] * arrowLength;
-        const isH2 = Math.abs(q2[0] * q2[1]) > 0.1;
-        drawArrow(c2.x, c2.y, target2X, target2Y, color2, isH2);
+        const target2X = c2.x + q2Info.dir[0] * q2Info.purity * CELL_SIZE;
+        const target2Y = c2.y - q2Info.dir[1] * q2Info.purity * CELL_SIZE;
+        const isH2 = Math.abs(q2Info.dir[0] * q2Info.dir[1]) > 0.1;
+        drawArrow(c2.x, c2.y, target2X, target2Y, color2, isH2, q2Info.purity);
     }
 }
 
@@ -704,18 +759,19 @@ function renderPreviews() {
             const color = getQubitColor(q);
 
             pCtx.beginPath();
-            pCtx.arc(cx, cy, 6, 0, 2 * Math.PI);
+            pCtx.arc(cx, cy, 7, 0, 2 * Math.PI);
             pCtx.fillStyle = color;
             pCtx.fill();
 
-            const arrowLength = 22;
-            const targetX = cx + q[0] * arrowLength;
-            const targetY = cy - q[1] * arrowLength;
+            const arrowLength = 25; // Longer preview arrow
+            const arrowDir = [Math.round(q[0]), Math.round(q[1])];
+            const targetX = cx + arrowDir[0] * arrowLength;
+            const targetY = cy - arrowDir[1] * arrowLength;
             const isH = Math.abs(q[0] * q[1]) > 0.1;
 
             pCtx.strokeStyle = color;
             pCtx.fillStyle = color;
-            pCtx.lineWidth = 3;
+            pCtx.lineWidth = 4;
             pCtx.beginPath();
             pCtx.moveTo(cx, cy);
             pCtx.lineTo(targetX, targetY);
@@ -725,25 +781,25 @@ function renderPreviews() {
             const angle = Math.atan2(targetY - cy, targetX - cx);
             pCtx.beginPath();
             pCtx.moveTo(targetX, targetY);
-            pCtx.lineTo(targetX - 7 * Math.cos(angle - Math.PI/6), targetY - 7 * Math.sin(angle - Math.PI/6));
-            pCtx.lineTo(targetX - 7 * Math.cos(angle + Math.PI/6), targetY - 7 * Math.sin(angle + Math.PI/6));
+            pCtx.lineTo(targetX - 9 * Math.cos(angle - Math.PI/6), targetY - 9 * Math.sin(angle - Math.PI/6));
+            pCtx.lineTo(targetX - 9 * Math.cos(angle + Math.PI/6), targetY - 9 * Math.sin(angle + Math.PI/6));
             pCtx.closePath();
             pCtx.fill();
         } else {
-            // 2 Qubits centered
             const cx1 = 45;
             const cx2 = 115;
             const cy = 46;
 
-            const q1 = [block.stateVector[0] + block.stateVector[1], block.stateVector[2] + block.stateVector[3]];
-            const q2 = [block.stateVector[0] + block.stateVector[2], block.stateVector[1] + block.stateVector[3]];
+            const q1Info = getReducedState(block.stateVector, 1);
+            const q2Info = getReducedState(block.stateVector, 2);
 
-            const color1 = getQubitColor(q1);
-            const color2 = getQubitColor(q2);
+            const color1 = getQubitColor(q1Info.dir);
+            const color2 = getQubitColor(q2Info.dir);
 
             // Connect
-            pCtx.strokeStyle = 'rgba(189, 0, 255, 0.4)';
-            pCtx.lineWidth = 2;
+            const avgP = (q1Info.purity + q2Info.purity) / 2;
+            pCtx.strokeStyle = `rgba(155, 93, 229, ${0.4 + (1 - avgP)*0.4})`;
+            pCtx.lineWidth = 2.5;
             pCtx.setLineDash([3, 3]);
             pCtx.beginPath();
             pCtx.moveTo(cx1, cy);
@@ -752,52 +808,57 @@ function renderPreviews() {
 
             // Qubit 1
             pCtx.beginPath();
-            pCtx.arc(cx1, cy, 6, 0, 2 * Math.PI);
+            pCtx.arc(cx1, cy, 7, 0, 2 * Math.PI);
             pCtx.fillStyle = color1;
             pCtx.fill();
 
             // Qubit 2
             pCtx.beginPath();
-            pCtx.arc(cx2, cy, 6, 0, 2 * Math.PI);
+            pCtx.arc(cx2, cy, 7, 0, 2 * Math.PI);
             pCtx.fillStyle = color2;
             pCtx.fill();
 
-            const arrowLength = 22;
+            const arrowLength = 25;
             
             // Arrow 1
-            const target1X = cx1 + q1[0] * arrowLength;
-            const target1Y = cy - q1[1] * arrowLength;
-            pCtx.strokeStyle = color1;
-            pCtx.fillStyle = color1;
-            pCtx.lineWidth = 3;
-            pCtx.beginPath();
-            pCtx.moveTo(cx1, cy);
-            pCtx.lineTo(target1X, target1Y);
-            pCtx.stroke();
-            const a1 = Math.atan2(target1Y - cy, target1X - cx1);
-            pCtx.beginPath();
-            pCtx.moveTo(target1X, target1Y);
-            pCtx.lineTo(target1X - 7 * Math.cos(a1 - Math.PI/6), target1Y - 7 * Math.sin(a1 - Math.PI/6));
-            pCtx.lineTo(target1X - 7 * Math.cos(a1 + Math.PI/6), target1Y - 7 * Math.sin(a1 + Math.PI/6));
-            pCtx.closePath();
-            pCtx.fill();
+            const target1X = cx1 + q1Info.dir[0] * q1Info.purity * arrowLength;
+            const target1Y = cy - q1Info.dir[1] * q1Info.purity * arrowLength;
+            if (q1Info.purity > 0.15) {
+                pCtx.strokeStyle = color1;
+                pCtx.fillStyle = color1;
+                pCtx.lineWidth = 4;
+                pCtx.beginPath();
+                pCtx.moveTo(cx1, cy);
+                pCtx.lineTo(target1X, target1Y);
+                pCtx.stroke();
+                const a1 = Math.atan2(target1Y - cy, target1X - cx1);
+                pCtx.beginPath();
+                pCtx.moveTo(target1X, target1Y);
+                pCtx.lineTo(target1X - 9 * Math.cos(a1 - Math.PI/6), target1Y - 9 * Math.sin(a1 - Math.PI/6));
+                pCtx.lineTo(target1X - 9 * Math.cos(a1 + Math.PI/6), target1Y - 9 * Math.sin(a1 + Math.PI/6));
+                pCtx.closePath();
+                pCtx.fill();
+            }
 
             // Arrow 2
-            const target2X = cx2 + q2[0] * arrowLength;
-            const target2Y = cy - q2[1] * arrowLength;
-            pCtx.strokeStyle = color2;
-            pCtx.fillStyle = color2;
-            pCtx.beginPath();
-            pCtx.moveTo(cx2, cy);
-            pCtx.lineTo(target2X, target2Y);
-            pCtx.stroke();
-            const a2 = Math.atan2(target2Y - cy, target2X - cx2);
-            pCtx.beginPath();
-            pCtx.moveTo(target2X, target2Y);
-            pCtx.lineTo(target2X - 7 * Math.cos(a2 - Math.PI/6), target2Y - 7 * Math.sin(a2 - Math.PI/6));
-            pCtx.lineTo(target2X - 7 * Math.cos(a2 + Math.PI/6), target2Y - 7 * Math.sin(a2 + Math.PI/6));
-            pCtx.closePath();
-            pCtx.fill();
+            const target2X = cx2 + q2Info.dir[0] * q2Info.purity * arrowLength;
+            const target2Y = cy - q2Info.dir[1] * q2Info.purity * arrowLength;
+            if (q2Info.purity > 0.15) {
+                pCtx.strokeStyle = color2;
+                pCtx.fillStyle = color2;
+                pCtx.lineWidth = 4;
+                pCtx.beginPath();
+                pCtx.moveTo(cx2, cy);
+                pCtx.lineTo(target2X, target2Y);
+                pCtx.stroke();
+                const a2 = Math.atan2(target2Y - cy, target2X - cx2);
+                pCtx.beginPath();
+                pCtx.moveTo(target2X, target2Y);
+                pCtx.lineTo(target2X - 9 * Math.cos(a2 - Math.PI/6), target2Y - 9 * Math.sin(a2 - Math.PI/6));
+                pCtx.lineTo(target2X - 9 * Math.cos(a2 + Math.PI/6), target2Y - 9 * Math.sin(a2 + Math.PI/6));
+                pCtx.closePath();
+                pCtx.fill();
+            }
         }
         pCtx.restore();
     }

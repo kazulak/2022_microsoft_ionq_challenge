@@ -147,8 +147,8 @@
                         <h4>1. Qubit Shapes & Grid Alignment</h4>
                         <p>A block is comprised of a <strong>Qubit Center</strong> (a glowing circle) and an <strong>Arrow</strong> indicating its state. The block physically occupies both the center cell and the target cell the arrow points to:</p>
                         <ul>
-                            <li><strong>Arrow Right (Cyan)</strong>: state $|0\rangle$. Covers the center and the cell to its right.</li>
-                            <li><strong>Arrow Up (Blue)</strong>: state $|1\rangle$. Covers the center and the cell above it.</li>
+                            <li><strong>Arrow Right (Cyan)</strong>: state |0⟩. Covers the center and the cell to its right.</li>
+                            <li><strong>Arrow Up (Blue)</strong>: state |1⟩. Covers the center and the cell above it.</li>
                             <li><strong>Arrow Diagonal (Purple)</strong>: Superposition state. Covers the center and the cell diagonal to it.</li>
                         </ul>
                     </div>
@@ -156,8 +156,8 @@
                         <h4>2. Applying Quantum Gates</h4>
                         <p>Use keyboard keys or click the gate buttons to rotate/manipulate the falling block's state and physically change its shape:</p>
                         <ul>
-                            <li><strong>X Gate (Key X)</strong>: Pauli-X flips the state. (NOT operation, e.g., swaps $|0\rangle \leftrightarrow |1\rangle$).</li>
-                            <li><strong>Z Gate (Key Z)</strong>: Pauli-Z flips the phase (negates the $|1\rangle$ coefficient).</li>
+                            <li><strong>X Gate (Key X)</strong>: Pauli-X flips the state. (NOT operation, e.g., swaps |0⟩ ↔ |1⟩).</li>
+                            <li><strong>Z Gate (Key Z)</strong>: Pauli-Z flips the phase (negates the |1⟩ coefficient).</li>
                             <li><strong>H Gate (Key H)</strong>: Hadamard gate creates/destroys superposition (rotates the arrow by 45°).</li>
                             <li><strong>CX / CZ / CH</strong>: Entangle and swap states on 2-qubit blocks.</li>
                         </ul>
@@ -166,22 +166,32 @@
 
                 <div class="modal-section">
                     <h4>💥 How to Clear Blocks (Interference Examples)</h4>
-                    <p>To clear blocks, you must land your active block on top of a stationary block such that they occupy the <strong>exact same squares</strong>, and their state vectors are <strong>opposite (cancelling out)</strong>, meaning $v_{\text{active}} = -v_{\text{board}}$ (out of phase by 180°).</p>
+                    <p>To clear blocks, you must land your active block on top of a stationary block such that they occupy the <strong>exact same squares</strong>, and their state vectors are <strong>opposite (cancelling out)</strong>, meaning v<sub>active</sub> = -v<sub>board</sub> (out of phase by 180°).</p>
                     
                     <div class="example-box">
                         <div class="example-item">
-                            <h5>Example 1: Cancelling $|0\rangle$ (Horizontal Qubits)</h5>
-                            <p>A stationary block is on the board in the $-|0\rangle$ state (arrow pointing <strong>Left</strong> $\leftarrow$). To cancel it, make your falling block point <strong>Right</strong> $\rightarrow$ ($+|0\rangle$) and land it on the same coordinates. They will cancel and both vanish!</p>
+                            <h5>Example 1: Cancelling |0⟩ (Horizontal Qubits)</h5>
+                            <p>A stationary block is on the board in the -|0⟩ state (arrow pointing <strong>Left</strong> ←). To cancel it, make your falling block point <strong>Right</strong> → (+|0⟩) and land it on the same coordinates. They will cancel and both vanish!</p>
                         </div>
                         <div class="example-item">
-                            <h5>Example 2: Phase Flipping for $|1\rangle$ (Vertical Qubits)</h5>
-                            <p>A stationary block is on the board in the $|1\rangle$ state (arrow pointing <strong>Up</strong> $\uparrow$). If your falling block is also in the $|1\rangle$ state ($\uparrow$), they will not cancel. First press **Z** to flip the falling block's phase to $-|1\rangle$ (arrow pointing <strong>Down</strong> $\downarrow$). When they touch, they will cancel!</p>
+                            <h5>Example 2: Phase Flipping for |1⟩ (Vertical Qubits)</h5>
+                            <p>A stationary block is on the board in the |1⟩ state (arrow pointing <strong>Up</strong> ↑). If your falling block is also in the |1⟩ state (↑), they will not cancel. First press **Z** to flip the falling block's phase to -|1⟩ (arrow pointing <strong>Down</strong> ↓). When they touch, they will cancel!</p>
                         </div>
                         <div class="example-item">
                             <h5>Example 3: Superposition & Rotations</h5>
-                            <p>Your falling block points <strong>Up-Right</strong> $\nearrow$. Pressing **H** rotates it to point <strong>Right</strong> $\rightarrow$. By combining **H** (45° rotation) and **X** (90° reflection), you can rotate your qubit to point in any of the 8 directions to match and cancel a target.</p>
+                            <p>Your falling block points <strong>Up-Right</strong> ↗. Pressing **H** rotates it to point <strong>Right</strong> →. By combining **H** (45° rotation) and **X** (90° reflection), you can rotate your qubit to point in any of the 8 directions to match and cancel a target.</p>
                         </div>
                     </div>
+                </div>
+
+                <div class="modal-section">
+                    <h4>🔗 Entanglement & Mixed States (2-Qubit Blocks)</h4>
+                    <p>When you apply <strong>CX</strong> (Controlled-X) or <strong>CZ</strong> (Controlled-Z) gates on 2-qubit blocks, the two qubits can become <strong>entangled</strong>. This is visually represented in a scientifically accurate way:</p>
+                    <ul>
+                        <li><strong>Definite vs. Mixed States</strong>: Entangled qubits no longer have independent, definite directions. Their individual states become <em>mixed</em>.</li>
+                        <li><strong>Shrinking Arrows</strong>: As qubits become more entangled, their individual state arrows will <strong>shrink in length</strong>, representing the loss of a definite single-qubit state! If they are maximally entangled (e.g. in a Bell state), the arrows will shrink to a dot, and the connecting dashed line will glow brightly.</li>
+                        <li><strong>Interaction</strong>: Single qubits cannot independently interact with entangled qubits because the entanglement binds the two qubits together. To clear them, you must cancel the joint state as a whole.</li>
+                    </ul>
                 </div>
 
                 <div class="interference-tip">

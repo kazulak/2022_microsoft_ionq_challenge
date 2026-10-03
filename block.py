@@ -15,8 +15,7 @@ def get_orientation_of_single_qubit(qubit):
 		else:
 			orientation += 1
 			test_vector = eighth_rotation.dot(test_vector)
-	print('Error: The state vector should have matched a vector by now')  # the code should never reach here
-	import pdb; pdb.set_trace()  # if this happens we'll have to debug it
+	raise ValueError(f'State {qubit} does not match any of the 8 arrow directions')  # the code should never reach here
 
 
 class Block:
@@ -30,14 +29,14 @@ class Block:
 		else:  # if state vector was not given in the argument, define one
 			if number_of_qubits == 1:
 				self.state_vector = np.array([1, 0], dtype='float')  # state vector. coefficients of [|0>,|1>]
-				for i in range(np.random.randint(0, 7)):  # pick random rotation
+				for i in range(np.random.randint(0, 8)):  # pick random rotation, 0-7 eighths
 					self.state_vector = eighth_rotation.dot(self.state_vector)
 			elif number_of_qubits == 2:
 				self.state_vector = np.array([1, 0, 0, 0], dtype='float')  # state vector. coefficients of [|00>,|01>,|10>,|11>]
-				for i in range(np.random.randint(0, 7)):  # pick random rotation
+				for i in range(np.random.randint(0, 4)):  # pick random rotation, 0-3 quarters
 					self.state_vector = np.kron(np.eye(2), eighth_rotation).dot(self.state_vector)  # apply the rotation twice so no 45 degree angles, so we can map it to two arrows
 					self.state_vector = np.kron(np.eye(2), eighth_rotation).dot(self.state_vector)  # effectively, only quarter rotations
-				for i in range(np.random.randint(0, 7)):  # pick random rotation
+				for i in range(np.random.randint(0, 4)):  # pick random rotation, 0-3 quarters
 					self.state_vector = np.kron(eighth_rotation, np.eye(2)).dot(self.state_vector)
 					self.state_vector = np.kron(eighth_rotation, np.eye(2)).dot(self.state_vector)
 			else:

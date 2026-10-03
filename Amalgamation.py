@@ -4,11 +4,15 @@ Created on Wed Mar 10 22:32:28 2021
 
 @author: frede
 """
+import os
 import pygame
 import sys
 from pygame.locals import *
 from QuantumTetris import QuantumTetris
 import time
+
+# Images are loaded with paths relative to this file's folder
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 # Set up named colors with rgb
 white, lgray, black, red, green = (
@@ -39,6 +43,9 @@ def main():
                        initial_square_size,
                        screen.get_rect().size,
                        QuantumTetris(), difficulty)
+    # Draw once so the buttons exist before the first click is handled
+    main_board.draw_board(gameDisplay, 0)
+    clock = pygame.time.Clock()
     run = True
     fast_forward = False
     last_action_time = time.time()
@@ -59,8 +66,8 @@ def main():
 
         # Get and rescale mouse position onto canvas
         mouse_RAW = pygame.mouse.get_pos()
-        mouse = (mouse_RAW[0]*main_board.rescale[1],
-                 mouse_RAW[1]*main_board.rescale[0])
+        mouse = (mouse_RAW[0]/main_board.rescale[0],
+                 mouse_RAW[1]/main_board.rescale[1])
 
         # Handle events
         for event in pygame.event.get():
@@ -141,6 +148,7 @@ def main():
         screen.blit(pygame.transform.scale(
             gameDisplay, screen.get_rect().size), (0, 0))
         pygame.display.flip()
+        clock.tick(60)  # cap the frame rate instead of spinning a CPU core
 
 
 class Board:
@@ -277,6 +285,9 @@ class Board:
             self.original_arrow, (2*self.square_hor, self.square_ver))
         self.H_arrow = pygame.transform.scale(
             self.original_H_arrow, (2*self.square_hor, 2*self.square_ver))
+        self.arrows = [pygame.transform.rotate(
+            self.arrow, 45*i) if i % 2 == 0 else pygame.transform.rotate(
+            self.H_arrow, 45*(i-1)) for i in range(8)]
 
     def rescale_buttons(self):
         self.Xpic = pygame.transform.scale(

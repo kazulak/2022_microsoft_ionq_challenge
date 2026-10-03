@@ -74,9 +74,15 @@ class QuantumTetris:
 			else:
 				print('Ignoring H gate on 2 qubit block')
 		elif gate == 'cx':
-			state_vector[:] = gates.CX.dot(state_vector)
+			if current_block.number_of_qubits == 2:
+				state_vector[:] = gates.CX.dot(state_vector)
+			else:
+				print('Ignoring CX gate on 1 qubit block')
 		elif gate == 'cz':
-			state_vector[:] = gates.CZ.dot(state_vector)
+			if current_block.number_of_qubits == 2:
+				state_vector[:] = gates.CZ.dot(state_vector)
+			else:
+				print('Ignoring CZ gate on 1 qubit block')
 		elif gate == 'swap':
 			state_vector[:] = gates.Swap.dot(state_vector)
 		else:

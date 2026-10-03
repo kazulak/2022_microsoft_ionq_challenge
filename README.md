@@ -4,21 +4,41 @@ Developed for MIT IQUHACK 2022
 
 Presented by QuanTris: `Caspian Chaharom, Danai Bili, Frederik Hardervig, Sneha Shakya, Tomasz Kazulak`
 
+**▶ Play in the browser: https://kazulak.github.io/2022_microsoft_ionq_challenge/**
+
+## Versions
+
+| What | Where |
+|---|---|
+| Version submitted to iQuHACK 2022 (frozen) | tag [`iquhack-2022-submission`](https://github.com/kazulak/2022_microsoft_ionq_challenge/tree/iquhack-2022-submission) |
+| Browser game, deployed to GitHub Pages | branch `browser-game` (this branch) |
+| Original pygame version, patched to run on Python 3.10+ / pygame 2 | branch `runnable-minimal` |
+
+Everything after the hackathon happens on branches; the submission tag is never moved.
+
+### Browser game
+
+Plain HTML/CSS/JS, no build step. `quantum.js` holds the game rules, `game.js` the rendering and input.
+Every block is in one of 56 exact quantum states (8 one-qubit, 48 two-qubit), stored as small integer
+vectors; all gate transitions and block shapes are computed once at load into a lookup table, so the
+game never does floating-point state math. To run locally, serve the folder (e.g. `python -m http.server`)
+and open `index.html`; open `tests.html` to run the rule tests.
+
 ## Game Rules and Goal
 
 In this game your blocks are Qubits, and you must make them destructively interfere to get rid of them.
 There are two types of blocks:
 * Single qubit blocks:
-  * The arrows represent the quantum state of the qubit. The `|0>` basis is the x-axis and teh `|1>` basis vector is the y-axis. So a Hadamard gate applied to `|0>` would make `1/√2 (|0>+|1>)` which would be an arrow pointing in the up-right direction 
+  * The arrows represent the quantum state of the qubit. The `|0>` basis is the x-axis and the `|1>` basis vector is the y-axis. So a Hadamard gate applied to `|0>` would make `1/√2 (|0>+|1>)` which would be an arrow pointing in the up-right direction 
   * You can apply the pauli `x` and `z` gates and Hadamard `h` gate by clicking the buttons or pressing the keys on the keyboard
   * The goal of the game is to have the blocks disappear using destructive interference
 * Two qubit blocks:
-  * Some blocks have two qubits. The single qubit gates operate on the first qubit
-  * There are also two two-qubit gates, the controlled x `CX` and controlled z `CZ`, which you can apply by clicking the buttons on the screen, or pressing the keys `a` and `s`, which are directly above their single qubit counterparts on the keyboard
+  * Some blocks have two qubits. The single qubit gates operate on the first qubit (in the browser game: the target qubit, switched with Tab / Q)
+  * There are also two two-qubit gates, the controlled x `CX` and controlled z `CZ`, which you can apply by clicking the buttons on the screen, or pressing the keys `s` (CX) and `a` (CZ), which are directly above their single qubit counterparts on the keyboard
 
-## How to run
+## How to run the original pygame version
 
-Run `python Amalgamation.py` after installing the dependencies `numpy` and `pygame`
+Check out `runnable-minimal`, install `numpy` and `pygame`, and run `python Amalgamation.py` from the repository root.
 
 ## GitHub Repo: https://github.com/CaspianChaharom/Quantum-Tetris
 

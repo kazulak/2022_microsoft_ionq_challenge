@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>QuanTris tests</title>
+    <style>
+        body { font: 14px/1.5 system-ui, sans-serif; margin: 24px; background: #fff; color: #111; }
+        .pass { color: #137333; }
+        .fail { color: #b3261e; font-weight: 600; }
+    </style>
+</head>
+<body>
+    <h1>QuanTris rule tests</h1>
+    <p id="summary">Running…</p>
+    <ul id="results"></ul>
+    <script src="quantum.js"></script>
+    <script>
+    'use strict';
+    const results = [];
+    function test(name, fn) {
+        try { fn(); results.push([name, null]); } catch (e) { results.push([name, e.message]); }
+    }
+    function assert(cond, msg) { if (!cond) throw new Error(msg); }
+    const id = v => STATES.findIndex(s => s.vec.join() === v.join());
+    const key = cells => cells.map(c => c.join(':')).sort().join(' ');
+
+    // A game with an empty board and a known queue.
+    function emptyGame(active, queue = []) {
+        const g = new Game();
+        g.settled = [];
+        g.grid.fill(null);
+        g.over = false;
+        g.points = 0;
+        g.queue = queue.length ? queue : [id([1, 0]), id([1, 0]), id([1, 0])];
+        g.active = active;
+        return g;
+    }
+
+    test('state space: 8 one-qubit and 48 two-qubit states', () => {
+        assert(STATES.filter(s => s.qubits === 1).length === 8, 'one-qubit count');
+        assert(STATES.filter(s => s.qubits === 2).length === 48, 'two-qubit count');
+        assert(STATES.filter(s => s.entangled).length === 16, 'entangled count');
+    });
+
+    test('every gate is its own inverse', () => {
+        for (const [i, s] of STATES.entries()) {
+            for (const [g, j] of Object.entries(s.next)) assert(STATES[j].next[g] === i, `${g} on ${s.vec}`);
+        }
+    });
+
+    test('one-qubit gates are the expected mirror images of the arrow', () => {
+        const mod8 = k => ((k % 8) + 8) % 8;
+        for (let k = 0; k < 8; k++) {
+            const s = STATES[id(DIRS[k])];
+            assert(s.arrows[0].dir === k, `arrow of dir ${k}`);
+            assert(STATES[s.next.x].arrows[0].dir === mod8(2 - k), `X on ${k}`);
+            assert(STATES[s.next.z].arrows[0].dir === mod8(-k), `Z on ${k}`);
+            assert(STATES[s.next.h].arrows[0].dir === mod8(1 - k), `H on ${k}`);
+        }
+    });
+
+    test('integer gates agree with floating-point matrices', () => {
+        const r = Math.SQRT1_2;
+        const M = {
+            h1: [[r, 0, r, 0], [0, r, 0, r], [r, 0, -r, 0], [0, r, 0, -r]],
+            h2: [[r, r, 0, 0], [r, -r, 0, 0], [0, 0, r, r], [0, 0, r, -r]],
+            cx: [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]],
+            cz: [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, -1]],
+        };
+        const unit = v => { const n = Math.hypot(...v); return v.map(x => x / n); };
+        for (const s of STATES.filter(s => s.qubits === 2)) {
+            for (const [g, m] of Object.entries(M)) {
+                const want = m.map(row => row.reduce((acc, a, j) => acc + a * unit(s.vec)[j], 0));
+                const got = unit(STATES[s.next[g]].vec);
+                assert(want.every((x, i) => Math.abs(x - got[i]) < 1e-12), `${g} on ${s.vec}`);
+            }
+        }
+    });
+
+    test('every state can be cancelled: its negation can cover exactly the same cells', () => {
+        for (const s of STATES) {
+            const n = STATES[s.neg];
+            assert(n.neg === STATES.indexOf(s), 'neg is an involution');
+            const mine = key(s.cells);
+            const ok = [-2, -1, 0, 1, 2].some(dx => [-2, -1, 0, 1, 2].some(dy =>
+                key(n.cells.map(([x, y]) => [x + dx, y + dy])) === mine));
+            assert(ok, `no cancelling placement for ${s.vec}`);
+        }
+    });
+
+    test('a 2-qubit state and its negation have identical shapes and opposite badges', () => {
+        for (const s of STATES.filter(s => s.qubits === 2)) {
+            const n = STATES[s.neg];
+            assert(key(s.cells) === key(n.cells), `shape of ${s.vec}`);
+            assert(s.sign === -n.sign, `badge of ${s.vec}`);
+        }
+    });
+
+    test('every 2-qubit block cancels with its negation when dropped onto it', () => {
+        for (const [i, s] of STATES.entries()) {
+            if (s.qubits !== 2) continue;
+            const g = emptyGame({ state: s.neg, x: 3, y: 12 });
+            g.settle({ state: i, x: 3, y: 1 - Math.min(...s.cells.map(c => c[1])) });
+            for (let t = 0; t < 15 && !g.points; t++) g.step();
+            assert(g.points === 1, `no cancel for ${s.vec}`);
+        }
+    });
+
+    test('cells of a block are distinct', () => {
+        for (const s of STATES) assert(new Set(s.cells.map(c => c.join())).size === s.cells.length, `${s.vec}`);
+    });
+
+    test('Bell state: H then CX entangles, arrows disappear', () => {
+        const bell = STATES[STATES[id([1, 0, 0, 0])].next.h1].next.cx;
+        assert(STATES[bell].vec.join() === '1,0,0,1', 'is (|00>+|11>)/sqrt2');
+        assert(STATES[bell].entangled && STATES[bell].arrows.length === 0, 'entangled, no arrows');
+        assert(STATES[bell].sign === 1 && STATES[STATES[bell].neg].sign === -1, 'sign shown');
+    });
+
+    test('falling right-arrow lands on a left-arrow and both cancel', () => {
+        const g = emptyGame({ state: id([1, 0]), x: 3, y: 10 });
+        g.settle({ state: id([-1, 0]), x: 4, y: 0 }); // covers (3,0),(4,0)
+        for (let i = 0; i < 12 && g.points === 0; i++) g.step();
+        assert(g.points === 1, 'scored');
+        assert(g.settled.length === 0 && g.grid.every(c => c === null), 'board empty');
+    });
+
+    test('vertical shapes cancel even though the partner blocks the row above', () => {
+        const g = emptyGame({ state: id([0, -1]), x: 3, y: 10 }); // down arrow
+        g.settle({ state: id([0, 1]), x: 3, y: 0 });              // up arrow: (3,0),(3,1)
+        for (let i = 0; i < 12 && g.points === 0; i++) g.step();
+        assert(g.points === 1, 'scored');
+    });
+
+    test('no cancelling through a third block', () => {
+        const g = emptyGame({ state: id([0, -1]), x: 3, y: 10 });
+        g.settle({ state: id([0, 1]), x: 3, y: 0 });
+        g.settle({ state: id([1, 0]), x: 2, y: 2 }); // (2,2),(3,2) sits in the way
+        for (let i = 0; i < 12; i++) g.step();
+        assert(g.points === 0, 'must not score');
+    });
+
+    test('moving sideways into the partner cancels', () => {
+        const g = emptyGame({ state: id([0, -1]), x: 2, y: 4 }); // down arrow: (2,4),(2,3)
+        g.settle({ state: id([0, 1]), x: 3, y: 3 });              // up arrow:   (3,3),(3,4)
+        g.move(1);                                               // -> (3,4),(3,3)
+        assert(g.points === 1 && g.settled.length === 0, 'cancelled');
+    });
+
+    test('moving into a block that is not opposite is blocked', () => {
+        const g = emptyGame({ state: id([0, 1]), x: 2, y: 3 });  // up: (2,3),(2,4)
+        g.settle({ state: id([0, 1]), x: 3, y: 3 });              // same state, same shape
+        g.move(1);
+        assert(g.points === 0 && g.active.x === 2, 'blocked');
+    });
+
+    test('gates that would collide are rejected', () => {
+        const g = emptyGame({ state: id([0, 1]), x: 3, y: 5 });  // up: (3,5),(3,6)
+        g.settle({ state: id([1, 0]), x: 4, y: 5 });              // (4,5),(5,5)
+        g.applyGate('x');                                        // |0> would cover (4,5)
+        assert(STATES[g.active.state].vec.join() === '0,1', 'X rejected');
+        g.applyGate('z');                                        // -|1>: (3,5),(3,4) is free
+        assert(STATES[g.active.state].vec.join() === '0,-1', 'Z applied');
+    });
+
+    test('one-qubit gates on a 2-qubit block act on the target qubit', () => {
+        const g = emptyGame({ state: id([1, 0, 0, 0]), x: 3, y: 10 });
+        g.target = 2;
+        g.applyGate('x');
+        assert(STATES[g.active.state].vec.join() === '0,1,0,0', '|00> -> |01>');
+    });
+
+    test('regression: a cancel whose next block cannot spawn ends the game', () => {
+        const g = emptyGame({ state: id([1, 0]), x: 0, y: 1 }, [id([1, 0])]);
+        g.settle({ state: id([-1, 0]), x: 1, y: 0 });          // partner (0,0),(1,0)
+        for (let x = 0; x < 10; x += 2) g.settle({ state: id([1, 0]), x, y: 19 }); // fill the top row
+        g.step();
+        assert(g.points === 1, 'cancelled');
+        assert(g.over, 'game over because the spawn row is full');
+    });
+
+    test('fuzz: 300 random games keep the board consistent', () => {
+        const actions = [g => g.step(), g => g.move(-1), g => g.move(1),
+            ...['x', 'z', 'h', 'cx', 'cz'].map(k => g => g.applyGate(k)), g => { g.target = 3 - g.target; }];
+        for (let n = 0; n < 300; n++) {
+            const g = new Game();
+            for (let t = 0; t < 600 && !g.over; t++) {
+                actions[Math.floor(Math.random() * actions.length)](g);
+                const owned = new Map();
+                for (const b of g.settled) for (const [x, y] of cellsOf(b)) {
+                    assert(x >= 0 && x < COLS && y >= 0 && y < ROWS, 'settled out of bounds');
+                    assert(!owned.has(x + ',' + y), 'settled blocks overlap');
+                    owned.set(x + ',' + y, b);
+                }
+                g.grid.forEach((b, i) => assert(b === (owned.get((i % COLS) + ',' + Math.floor(i / COLS)) || null), 'grid out of sync'));
+                if (!g.over) assert(g.fits(g.active), 'active block overlaps');
+            }
+        }
+    });
+
+    test('new games start with score 0 and never hang', () => {
+        for (let n = 0; n < 2000; n++) {
+            const g = new Game();
+            assert(g.points === 0, 'score at start');
+        }
+    });
+
+    const failed = results.filter(r => r[1]);
+    document.getElementById('summary').textContent = `${results.length - failed.length}/${results.length} passed`;
+    document.getElementById('summary').className = failed.length ? 'fail' : 'pass';
+    document.getElementById('results').innerHTML = results.map(([n, e]) =>
+        `<li class="${e ? 'fail' : 'pass'}">${e ? '✗' : '✓'} ${n}${e ? ' — ' + e : ''}</li>`).join('');
+    console.log('QUANTRIS_TESTS', JSON.stringify(results));
+    </script>
+</body>
+</html>

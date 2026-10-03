@@ -1,1064 +1,323 @@
-/* Quantum Tetris Game Logic */
+/* QuanTris — rendering and input. Game rules live in quantum.js. */
+'use strict';
 
-// Math Constants and Helpers
-const sqrt2 = Math.sqrt(2);
-
-function rotate45(v) {
-    return [(v[0] - v[1]) / sqrt2, (v[0] + v[1]) / sqrt2];
-}
-
-function rotate90(v) {
-    return [-v[1], v[0]];
-}
-
-function kron(v1, v2) {
-    const res = [];
-    for (let i = 0; i < v1.length; i++) {
-        for (let j = 0; j < v2.length; j++) {
-            res.push(v1[i] * v2[j]);
-        }
-    }
-    return res;
-}
-
-function getOrientation(qubitState) {
-    // Returns angle between 0 and 7 representing multiples of 45 degrees
-    const angle = Math.atan2(qubitState[1], qubitState[0]);
-    let deg = (angle * 180) / Math.PI;
-    if (deg < 0) deg += 360;
-    // Map to closest 45 degrees
-    return Math.round(deg / 45) % 8;
-}
-
-function getQubitColor(stateVector) {
-    const angle = Math.atan2(stateVector[1], stateVector[0]);
-    let deg = (angle * 180) / Math.PI;
-    if (deg < 0) deg += 360;
-    // Offset by 180 so |0> is cyan
-    const hue = (deg + 180) % 360;
-    return `hsl(${hue}, 80%, 48%)`;
-}
-
-function getReducedState(state, qubitIndex) {
-    let z, x;
-    if (qubitIndex === 1) {
-        // Qubit 1 (first qubit)
-        const p0 = state[0]*state[0] + state[1]*state[1];
-        const p1 = state[2]*state[2] + state[3]*state[3];
-        const coh = state[0]*state[2] + state[1]*state[3];
-        z = p0 - p1;
-        x = 2 * coh;
-    } else {
-        // Qubit 2 (second qubit)
-        const p0 = state[0]*state[0] + state[2]*state[2];
-        const p1 = state[1]*state[1] + state[3]*state[3];
-        const coh = state[0]*state[1] + state[2]*state[3];
-        z = p0 - p1;
-        x = 2 * coh;
-    }
-    
-    const r = Math.sqrt(x*x + z*z);
-    
-    // Find Bloch angle
-    let blochAngle = Math.atan2(x, z);
-    let stateAngle = blochAngle / 2;
-    
-    return {
-        dir: [Math.cos(stateAngle), Math.sin(stateAngle)],
-        purity: r
-    };
-}
-
-function squaresEqual(sqs1, sqs2) {
-    if (sqs1.length !== sqs2.length) return false;
-    for (const p1 of sqs1) {
-        let found = false;
-        for (const p2 of sqs2) {
-            if (p1[0] === p2[0] && p1[1] === p2[1]) {
-                found = true;
-                break;
-            }
-        }
-        if (!found) return false;
-    }
-    return true;
-}
-
-function statesOpposite(v1, v2) {
-    if (v1.length !== v2.length) return false;
-    for (let i = 0; i < v1.length; i++) {
-        if (Math.abs(v1[i] + v2[i]) > 0.05) {
-            return false;
-        }
-    }
-    return true;
-}
-
-// Block Representation
-class Block {
-    constructor(numQubits = null, stateVector = null, position = null) {
-        if (numQubits === null) {
-            this.numQubits = Math.random() < 0.4 ? 2 : 1; // 40% chance of 2 qubits
-        } else {
-            this.numQubits = numQubits;
-        }
-
-        // Spawn position
-        this.position = position ? [...position] : [4, 19];
-
-        if (stateVector !== null) {
-            this.stateVector = [...stateVector];
-        } else {
-            if (this.numQubits === 1) {
-                // Starts at |0> [1, 0] rotated randomly
-                let state = [1, 0];
-                const rotations = Math.floor(Math.random() * 8);
-                for (let i = 0; i < rotations; i++) {
-                    state = rotate45(state);
-                }
-                this.stateVector = state;
-            } else {
-                // Starts at |00> [1, 0, 0, 0] rotated randomly in multiples of 90 degrees
-                let s1 = [1, 0];
-                const r1 = Math.floor(Math.random() * 4);
-                for (let i = 0; i < r1; i++) {
-                    s1 = rotate90(s1);
-                }
-
-                let s2 = [1, 0];
-                const r2 = Math.floor(Math.random() * 4);
-                for (let i = 0; i < r2; i++) {
-                    s2 = rotate90(s2);
-                }
-
-                this.stateVector = kron(s1, s2);
-            }
-        }
-    }
-
-    getCoveredSquares() {
-        const x = this.position[0];
-        const y = this.position[1];
-
-        if (this.numQubits === 1) {
-            const q = this.stateVector;
-            const arrowDir = [Math.round(q[0]), Math.round(q[1])];
-            return [
-                [x, y],
-                [x + arrowDir[0], y + arrowDir[1]]
-            ];
-        } else {
-            const q1Info = getReducedState(this.stateVector, 1);
-            const q2Info = getReducedState(this.stateVector, 2);
-
-            const arrow1Dir = [Math.round(q1Info.dir[0]), Math.round(q1Info.dir[1])];
-            const arrow2Dir = [Math.round(q2Info.dir[0]), Math.round(q2Info.dir[1])];
-
-            return [
-                [x, y],
-                [x + arrow1Dir[0], y + arrow1Dir[1]],
-                [x + 2, y],
-                [x + 2 + arrow2Dir[0], y + arrow2Dir[1]]
-            ];
-        }
-    }
-}
-
-// Collision Checks
-function checkOverlap(blocks) {
-    if (blocks.length === 0) return false;
-    const currentBlock = blocks[blocks.length - 1];
-    const currentSquares = currentBlock.getCoveredSquares();
-
-    // Check boundaries
-    for (const sq of currentSquares) {
-        if (sq[0] < 0 || sq[0] > 9 || sq[1] < 0 || sq[1] > 19) {
-            return true;
-        }
-    }
-
-    // Check overlap with other blocks
-    for (let i = 0; i < blocks.length - 1; i++) {
-        const otherSquares = blocks[i].getCoveredSquares();
-        for (const sq of currentSquares) {
-            for (const oSq of otherSquares) {
-                if (sq[0] === oSq[0] && sq[1] === oSq[1]) {
-                    return true;
-                }
-            }
-        }
-    }
-    return false;
-}
-
-// Interference Removal
-function removeInterference(blocks) {
-    if (blocks.length === 0) return { blocks, didCancel: false };
-    const currentBlock = blocks[blocks.length - 1];
-    const currentSquares = currentBlock.getCoveredSquares();
-
-    for (let i = 0; i < blocks.length - 1; i++) {
-        const otherBlock = blocks[i];
-
-        if (currentBlock.numQubits !== otherBlock.numQubits) continue;
-
-        const otherSquares = otherBlock.getCoveredSquares();
-
-        if (squaresEqual(currentSquares, otherSquares)) {
-            if (statesOpposite(currentBlock.stateVector, otherBlock.stateVector)) {
-                // Found cancelling block!
-                const newBlocks = [...blocks];
-                newBlocks.splice(blocks.length - 1, 1); // remove active
-                newBlocks.splice(i, 1); // remove matching stationary
-                return { blocks: newBlocks, didCancel: true };
-            }
-        }
-    }
-    return { blocks, didCancel: false };
-}
-
-// Main Game State class
-class GameState {
-    constructor() {
-        this.blocks = [new Block()];
-        this.upcomingBlocks = [];
-        this.points = 0;
-        this.difficulty = 0.7; // fall interval in seconds (lower is harder)
-        this.isGameOver = false;
-        this.activeQubitIndex = 1; // Target qubit for 1-qubit gates on 2-qubit blocks (1 = Left, 2 = Right)
-
-        // Generate initial pool of upcoming blocks
-        const number_of_initial_blocks = 10;
-        while (this.upcomingBlocks.length < number_of_initial_blocks) {
-            const randX = Math.floor(Math.random() * 5) + 1; // 1 to 5
-            this.upcomingBlocks.push(new Block(null, null, [randX, 18]));
-        }
-
-        // Pre-populate board
-        while (this.blocks.length < number_of_initial_blocks) {
-            this.update();
-        }
-    }
-
-    ensureUpcomingBlocks() {
-        while (this.upcomingBlocks.length < 5) {
-            this.upcomingBlocks.push(new Block());
-        }
-    }
-
-    handleGateAction(gate) {
-        if (this.isGameOver) return;
-
-        const activeIndex = this.blocks.length - 1;
-        const currentBlock = this.blocks[activeIndex];
-        const oldState = [...currentBlock.stateVector];
-        let newState = [...oldState];
-        const numQubits = currentBlock.numQubits;
-
-        if (gate === 'x') {
-            if (numQubits === 1) {
-                newState = [oldState[1], oldState[0]];
-            } else {
-                if (this.activeQubitIndex === 1) {
-                    newState = [oldState[2], oldState[3], oldState[0], oldState[1]];
-                } else {
-                    newState = [oldState[1], oldState[0], oldState[3], oldState[2]];
-                }
-            }
-        } else if (gate === 'z') {
-            if (numQubits === 1) {
-                newState = [oldState[0], -oldState[1]];
-            } else {
-                if (this.activeQubitIndex === 1) {
-                    newState = [oldState[0], oldState[1], -oldState[2], -oldState[3]];
-                } else {
-                    newState = [oldState[0], -oldState[1], oldState[2], -oldState[3]];
-                }
-            }
-        } else if (gate === 'h') {
-            if (numQubits === 1) {
-                newState = [(oldState[0] + oldState[1]) / sqrt2, (oldState[0] - oldState[1]) / sqrt2];
-            } else {
-                if (this.activeQubitIndex === 1) {
-                    newState = [
-                        (oldState[0] + oldState[2]) / sqrt2,
-                        (oldState[1] + oldState[3]) / sqrt2,
-                        (oldState[0] - oldState[2]) / sqrt2,
-                        (oldState[1] - oldState[3]) / sqrt2
-                    ];
-                } else {
-                    newState = [
-                        (oldState[0] + oldState[1]) / sqrt2,
-                        (oldState[0] - oldState[1]) / sqrt2,
-                        (oldState[2] + oldState[3]) / sqrt2,
-                        (oldState[2] - oldState[3]) / sqrt2
-                    ];
-                }
-            }
-        } else if (gate === 'cx') {
-            if (numQubits === 2) {
-                newState = [oldState[0], oldState[1], oldState[3], oldState[2]];
-            } else {
-                return;
-            }
-        } else if (gate === 'cz') {
-            if (numQubits === 2) {
-                newState = [oldState[0], oldState[1], oldState[2], -oldState[3]];
-            } else {
-                return;
-            }
-        } else if (gate === 'ch') {
-            if (numQubits === 2) {
-                newState = [
-                    oldState[0],
-                    oldState[1],
-                    (oldState[2] + oldState[3]) / sqrt2,
-                    (oldState[2] - oldState[3]) / sqrt2
-                ];
-            } else {
-                return;
-            }
-        } else if (gate === 'swap') {
-            if (numQubits === 2) {
-                newState = [oldState[0], oldState[2], oldState[1], oldState[3]];
-            } else {
-                return;
-            }
-        }
-
-        const tentativeBlocks = this.blocks.map((b, idx) => {
-            if (idx === activeIndex) {
-                return new Block(b.numQubits, newState, b.position);
-            }
-            return b;
-        });
-
-        const res = removeInterference(tentativeBlocks);
-        if (!checkOverlap(res.blocks)) {
-            this.blocks = res.blocks;
-            if (res.didCancel) {
-                this.points += 1;
-                this.blocks.push(this.upcomingBlocks.shift());
-                this.ensureUpcomingBlocks();
-                this.activeQubitIndex = 1;
-            }
-        }
-    }
-
-    handleMoveBlock(direction) {
-        if (this.isGameOver) return;
-        const activeIndex = this.blocks.length - 1;
-        const tentativeBlocks = this.blocks.map((b, idx) => {
-            if (idx === activeIndex) {
-                const newPos = [...b.position];
-                if (direction === 'left') newPos[0] -= 1;
-                if (direction === 'right') newPos[0] += 1;
-                return new Block(b.numQubits, b.stateVector, newPos);
-            }
-            return b;
-        });
-
-        const res = removeInterference(tentativeBlocks);
-        if (!checkOverlap(res.blocks)) {
-            this.blocks = res.blocks;
-            if (res.didCancel) {
-                this.points += 1;
-                this.blocks.push(this.upcomingBlocks.shift());
-                this.ensureUpcomingBlocks();
-                this.activeQubitIndex = 1;
-            }
-        }
-    }
-
-    update() {
-        if (this.isGameOver) return;
-        this.ensureUpcomingBlocks();
-
-        const activeIndex = this.blocks.length - 1;
-        const activeBlock = this.blocks[activeIndex];
-
-        // Fall down by 1
-        activeBlock.position[1] -= 1;
-
-        let res = removeInterference(this.blocks);
-        if (res.didCancel) {
-            this.points += 1;
-            this.blocks = res.blocks;
-            this.blocks.push(this.upcomingBlocks.shift());
-            this.blocks[this.blocks.length - 1].position[1] -= 1;
-            this.activeQubitIndex = 1;
-        } else {
-            // Check if they cancel two moves ahead
-            activeBlock.position[1] -= 1;
-            res = removeInterference(this.blocks);
-            if (res.didCancel) {
-                this.points += 1;
-                this.blocks = res.blocks;
-                this.blocks.push(this.upcomingBlocks.shift());
-                this.blocks[this.blocks.length - 1].position[1] -= 1;
-                this.activeQubitIndex = 1;
-            } else {
-                // Undo the second fall
-                activeBlock.position[1] += 1;
-            }
-        }
-
-        // Check if landed (overlap with floor or other blocks)
-        if (checkOverlap(this.blocks)) {
-            if (activeBlock.position[1] >= 18) {
-                this.isGameOver = true;
-                return;
-            }
-            // Undo fall and finalize
-            activeBlock.position[1] += 1;
-            this.blocks.push(this.upcomingBlocks.shift());
-            this.ensureUpcomingBlocks();
-            this.activeQubitIndex = 1;
-        }
-    }
-}
-
-// UI and Render Code
-let gameState = null;
-let lastTickTime = 0;
-let gameLoopId = null;
-let highscore = localStorage.getItem('quantris_highscore') || 0;
-
-const canvas = document.getElementById('game-canvas');
-const ctx = canvas.getContext('2d');
-const CELL_SIZE = 35;
-
-// Set high DPI canvas scaling
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
+const CELL = 35;
+const W = COLS * CELL, H = ROWS * CELL;
 const dpr = window.devicePixelRatio || 1;
-canvas.width = 350 * dpr;
-canvas.height = 700 * dpr;
-ctx.scale(dpr, dpr);
 
-function getCellCenter(x, y) {
-    const cx = x * CELL_SIZE + CELL_SIZE / 2;
-    const cy = (19 - y) * CELL_SIZE + CELL_SIZE / 2;
-    return { x: cx, y: cy };
+// Backing store at device resolution; the CSS size stays w x h.
+function makeCanvas(canvas, w, h) {
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    const c = canvas.getContext('2d');
+    c.scale(dpr, dpr);
+    return c;
 }
 
-function drawGrid() {
-    ctx.fillStyle = '#020408';
-    ctx.fillRect(0, 0, 350, 700);
+const boardCanvas = document.getElementById('game-canvas');
+const ctx = makeCanvas(boardCanvas, W, H); // CSS size set in style.css
+// Grid + settled blocks are redrawn only when they change.
+const staticLayer = document.createElement('canvas');
+const sctx = makeCanvas(staticLayer, W, H);
 
-    // Draw grid checker lines
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.035)';
-    ctx.lineWidth = 1;
-
-    for (let c = 0; c <= 10; c++) {
-        ctx.beginPath();
-        ctx.moveTo(c * CELL_SIZE, 0);
-        ctx.lineTo(c * CELL_SIZE, 700);
-        ctx.stroke();
-    }
-    for (let r = 0; r <= 20; r++) {
-        ctx.beginPath();
-        ctx.moveTo(0, r * CELL_SIZE);
-        ctx.lineTo(350, r * CELL_SIZE);
-        ctx.stroke();
+function drawArrow(c, x1, y1, x2, y2, color, diagonal) {
+    const angle = Math.atan2(y2 - y1, x2 - x1);
+    c.strokeStyle = c.fillStyle = color;
+    c.lineWidth = 4.5;
+    c.lineCap = 'round';
+    c.beginPath();
+    c.moveTo(x1, y1);
+    c.lineTo(x2, y2);
+    c.stroke();
+    c.beginPath();
+    c.moveTo(x2, y2);
+    c.lineTo(x2 - 12 * Math.cos(angle - Math.PI / 6), y2 - 12 * Math.sin(angle - Math.PI / 6));
+    c.lineTo(x2 - 12 * Math.cos(angle + Math.PI / 6), y2 - 12 * Math.sin(angle + Math.PI / 6));
+    c.closePath();
+    c.fill();
+    if (diagonal) { // superposition marker, as in the original Hadamard arrow
+        c.beginPath();
+        c.arc((x1 + x2) / 2, (y1 + y2) / 2, 4.5, 0, 2 * Math.PI);
+        c.fill();
     }
 }
 
-function drawArrow(x1, y1, x2, y2, color, isDouble = false, opacity = 1.0) {
-    if (opacity < 0.1) return; // Don't draw if nearly invisible
-    ctx.save();
-    ctx.globalAlpha = opacity;
-    ctx.strokeStyle = color;
-    ctx.fillStyle = color;
-    ctx.lineWidth = 4.5; // Thicker arrow line for visibility
-    ctx.lineCap = 'round';
+// Draw a block whose anchor cell is centred at (cx, cy), with cells `size` px wide.
+function drawBlock(c, stateId, cx, cy, size, { active = false, time = 0 } = {}) {
+    const st = STATES[stateId];
+    const pad = size * 0.06;
+    const colorOf = i => (st.entangled ? ENTANGLED_COLOR : DIR_COLOR[st.cellDirs[i]]);
 
-    // Shadow glow
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 8;
+    c.save();
+    st.cells.forEach(([dx, dy], i) => {
+        c.fillStyle = st.entangled ? ENTANGLED_FILL : DIR_FILL[st.cellDirs[i]];
+        c.strokeStyle = colorOf(i);
+        c.lineWidth = active ? 2.5 : 1.5;
+        c.beginPath();
+        c.roundRect(cx + (dx - 0.5) * size + pad, cy - (dy + 0.5) * size + pad, size - 2 * pad, size - 2 * pad, size * 0.17);
+        c.fill();
+        c.stroke();
+    });
 
-    // Draw line
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
-
-    // Arrow Head (only draw if the arrow has sufficient length/purity)
-    const length = Math.sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
-    if (length > 10) {
-        const angle = Math.atan2(y2 - y1, x2 - x1);
-        const headLength = 12; // Larger arrowhead
-
-        ctx.beginPath();
-        ctx.moveTo(x2, y2);
-        ctx.lineTo(x2 - headLength * Math.cos(angle - Math.PI / 6), y2 - headLength * Math.sin(angle - Math.PI / 6));
-        ctx.lineTo(x2 - headLength * Math.cos(angle + Math.PI / 6), y2 - headLength * Math.sin(angle + Math.PI / 6));
-        ctx.closePath();
-        ctx.fill();
+    if (st.qubits === 2) { // bridge between the two qubits
+        const x2 = cx + 2 * size;
+        c.strokeStyle = st.entangled ? 'rgba(155, 93, 229, 0.9)' : 'rgba(155, 93, 229, 0.45)';
+        c.lineWidth = st.entangled ? 5 : 3;
+        c.setLineDash([6, 6]);
+        if (active) c.lineDashOffset = -(time / 35) % 24;
+        c.beginPath();
+        c.moveTo(cx, cy);
+        c.lineTo(x2, cy);
+        c.stroke();
+        c.setLineDash([]);
     }
 
-    if (isDouble && length > 12) {
-        // Draw Hadamard marker (circle on arrow shaft)
-        ctx.beginPath();
-        ctx.arc((x1 + x2) / 2, (y1 + y2) / 2, 4.5, 0, 2 * Math.PI);
-        ctx.fill();
+    for (const { at, dir } of st.arrows) {
+        const [dx, dy] = DIRS[dir];
+        const x1 = cx + at * size;
+        drawArrow(c, x1, cy, x1 + dx * size, cy - dy * size, DIR_COLOR[dir], dir % 2 === 1);
     }
 
-    ctx.restore();
-}
-
-function drawRoundedRect(ctx, x, y, width, height, radius) {
-    ctx.beginPath();
-    ctx.moveTo(x + radius, y);
-    ctx.lineTo(x + width - radius, y);
-    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-    ctx.lineTo(x + width, y + height - radius);
-    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-    ctx.lineTo(x + radius, y + height);
-    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-    ctx.lineTo(x, y + radius);
-    ctx.quadraticCurveTo(x, y, x + radius, y);
-    ctx.closePath();
-}
-
-function drawGhostBlock(block) {
-    if (!block) return;
-    const ghost = new Block(block.numQubits, block.stateVector, [...block.position]);
-    const tempBlocks = [...gameState.blocks];
-    const activeIdx = tempBlocks.length - 1;
-
-    while (true) {
-        ghost.position[1] -= 1;
-        tempBlocks[activeIdx] = ghost;
-        if (checkOverlap(tempBlocks)) {
-            ghost.position[1] += 1;
-            break;
+    // Qubit centres, on top of the arrows. For 2-qubit blocks they carry the
+    // sign of the state: the only visible difference from its negation.
+    const r = size * (st.qubits === 2 ? 0.27 : 0.2);
+    c.font = `800 ${Math.round(size * 0.42)}px system-ui, sans-serif`;
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    for (const q of st.qubits === 2 ? [0, 2] : [0]) {
+        c.fillStyle = st.entangled ? ENTANGLED_COLOR : DIR_COLOR[st.cellDirs[q]];
+        c.beginPath();
+        c.arc(cx + q * size, cy, r, 0, 2 * Math.PI);
+        c.fill();
+        if (st.qubits === 2) {
+            c.fillStyle = '#05070f';
+            c.fillText(st.sign > 0 ? '+' : '−', cx + q * size, cy + size * 0.03);
         }
     }
+    c.restore();
+}
 
-    const squares = ghost.getCoveredSquares();
+const cellCenter = (x, y) => [x * CELL + CELL / 2, (ROWS - 1 - y) * CELL + CELL / 2];
+
+function drawStatic(game) {
+    sctx.fillStyle = '#020408';
+    sctx.fillRect(0, 0, W, H);
+    sctx.strokeStyle = 'rgba(255, 255, 255, 0.035)';
+    sctx.lineWidth = 1;
+    sctx.beginPath();
+    for (let x = 0; x <= COLS; x++) { sctx.moveTo(x * CELL, 0); sctx.lineTo(x * CELL, H); }
+    for (let y = 0; y <= ROWS; y++) { sctx.moveTo(0, y * CELL); sctx.lineTo(W, y * CELL); }
+    sctx.stroke();
+    if (!game) return;
+    for (const b of game.settled) drawBlock(sctx, b.state, ...cellCenter(b.x, b.y), CELL);
+}
+
+function drawGhost(game) {
+    const g = { ...game.active, y: game.ghostY() };
+    const st = STATES[g.state];
     ctx.save();
-    ctx.globalAlpha = 0.25;
+    ctx.globalAlpha = 0.35;
     ctx.setLineDash([4, 4]);
-
-    if (block.numQubits === 1) {
-        const qState = block.stateVector;
-        const color = getQubitColor(qState);
-        for (const sq of squares) {
-            ctx.strokeStyle = color;
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.015)';
-            ctx.lineWidth = 1.5;
-            const pad = 2;
-            drawRoundedRect(ctx, sq[0] * CELL_SIZE + pad, (19 - sq[1]) * CELL_SIZE + pad, CELL_SIZE - pad*2, CELL_SIZE - pad*2, 6);
-            ctx.fill();
-            ctx.stroke();
-        }
-    } else {
-        const q1Info = getReducedState(block.stateVector, 1);
-        const q2Info = getReducedState(block.stateVector, 2);
-        const color1 = getQubitColor(q1Info.dir);
-        const color2 = getQubitColor(q2Info.dir);
-
-        for (let i = 0; i < 2; i++) {
-            const sq = squares[i];
-            ctx.strokeStyle = color1;
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.015)';
-            ctx.lineWidth = 1.5;
-            const pad = 2;
-            drawRoundedRect(ctx, sq[0] * CELL_SIZE + pad, (19 - sq[1]) * CELL_SIZE + pad, CELL_SIZE - pad*2, CELL_SIZE - pad*2, 6);
-            ctx.fill();
-            ctx.stroke();
-        }
-        for (let i = 2; i < 4; i++) {
-            const sq = squares[i];
-            ctx.strokeStyle = color2;
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.015)';
-            ctx.lineWidth = 1.5;
-            const pad = 2;
-            drawRoundedRect(ctx, sq[0] * CELL_SIZE + pad, (19 - sq[1]) * CELL_SIZE + pad, CELL_SIZE - pad*2, CELL_SIZE - pad*2, 6);
-            ctx.fill();
-            ctx.stroke();
-        }
-    }
+    ctx.lineWidth = 1.5;
+    cellsOf(g).forEach(([x, y], i) => {
+        ctx.strokeStyle = st.entangled ? ENTANGLED_COLOR : DIR_COLOR[st.cellDirs[i]];
+        ctx.beginPath();
+        ctx.roundRect(x * CELL + 2, (ROWS - 1 - y) * CELL + 2, CELL - 4, CELL - 4, 6);
+        ctx.stroke();
+    });
     ctx.restore();
 }
 
-function drawBlock(block, isActive = false) {
-    const x = block.position[0];
-    const y = block.position[1];
-    const sqs = block.getCoveredSquares();
-
-    if (block.numQubits === 1) {
-        const qState = block.stateVector;
-        const color = getQubitColor(qState);
-        const fillCol = color.replace('hsl', 'hsla').replace(')', ', 0.14)');
-
-        for (const sq of sqs) {
-            ctx.save();
-            ctx.fillStyle = fillCol;
-            ctx.strokeStyle = color;
-            ctx.lineWidth = isActive ? 2.5 : 1.5;
-            if (isActive) {
-                ctx.shadowColor = color;
-                ctx.shadowBlur = 6;
-            }
-            const pad = 2;
-            drawRoundedRect(ctx, sq[0] * CELL_SIZE + pad, (19 - sq[1]) * CELL_SIZE + pad, CELL_SIZE - pad*2, CELL_SIZE - pad*2, 6);
-            ctx.fill();
-            ctx.stroke();
-            ctx.restore();
-        }
-
-        const center = getCellCenter(x, y);
-        const arrowDir = [Math.round(qState[0]), Math.round(qState[1])];
-        const targetX = center.x + arrowDir[0] * CELL_SIZE;
-        const targetY = center.y - arrowDir[1] * CELL_SIZE;
-
-        // Qubit center dot
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(center.x, center.y, 7, 0, 2 * Math.PI);
-        ctx.fillStyle = color;
-        ctx.shadowColor = color;
-        ctx.shadowBlur = isActive ? 12 : 6;
-        ctx.fill();
-        ctx.restore();
-
-        // Arrow
-        const isHadamard = Math.abs(qState[0] * qState[1]) > 0.1;
-        drawArrow(center.x, center.y, targetX, targetY, color, isHadamard, 1.0);
-    } else {
-        const q1Info = getReducedState(block.stateVector, 1);
-        const q2Info = getReducedState(block.stateVector, 2);
-
-        const color1 = getQubitColor(q1Info.dir);
-        const color2 = getQubitColor(q2Info.dir);
-        const fillCol1 = color1.replace('hsl', 'hsla').replace(')', ', 0.14)');
-        const fillCol2 = color2.replace('hsl', 'hsla').replace(')', ', 0.14)');
-
-        for (let i = 0; i < 2; i++) {
-            const sq = sqs[i];
-            ctx.save();
-            ctx.fillStyle = fillCol1;
-            ctx.strokeStyle = color1;
-            ctx.lineWidth = isActive ? 2.5 : 1.5;
-            if (isActive) {
-                ctx.shadowColor = color1;
-                ctx.shadowBlur = 6;
-            }
-            const pad = 2;
-            drawRoundedRect(ctx, sq[0] * CELL_SIZE + pad, (19 - sq[1]) * CELL_SIZE + pad, CELL_SIZE - pad*2, CELL_SIZE - pad*2, 6);
-            ctx.fill();
-            ctx.stroke();
-            ctx.restore();
-        }
-
-        for (let i = 2; i < 4; i++) {
-            const sq = sqs[i];
-            ctx.save();
-            ctx.fillStyle = fillCol2;
-            ctx.strokeStyle = color2;
-            ctx.lineWidth = isActive ? 2.5 : 1.5;
-            if (isActive) {
-                ctx.shadowColor = color2;
-                ctx.shadowBlur = 6;
-            }
-            const pad = 2;
-            drawRoundedRect(ctx, sq[0] * CELL_SIZE + pad, (19 - sq[1]) * CELL_SIZE + pad, CELL_SIZE - pad*2, CELL_SIZE - pad*2, 6);
-            ctx.fill();
-            ctx.stroke();
-            ctx.restore();
-        }
-
-        const c1 = getCellCenter(x, y);
-        const c2 = getCellCenter(x + 2, y);
-
-        // Connect line (entanglement line)
-        ctx.save();
-        const avgPurity = (q1Info.purity + q2Info.purity) / 2;
-        const entanglementStrength = 1 - avgPurity;
-        
-        // Background thick energy glow capsule (fades/brightens with entanglement)
-        ctx.strokeStyle = `rgba(155, 93, 229, ${0.08 + entanglementStrength * 0.28})`;
-        ctx.lineWidth = 14;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(c1.x, c1.y);
-        ctx.lineTo(c2.x, c2.y);
-        ctx.stroke();
-
-        // Inner dynamic flowing dashed line (moving ants effect)
-        ctx.strokeStyle = `rgba(155, 93, 229, ${0.45 + entanglementStrength * 0.45})`;
-        ctx.lineWidth = 3.5 + entanglementStrength * 2.0;
-        ctx.setLineDash([6, 6]);
-        ctx.lineDashOffset = - (Date.now() / 35) % 24; // dynamically updates over time
-        ctx.shadowColor = '#9b5de5';
-        ctx.shadowBlur = 4 + entanglementStrength * 8;
-        ctx.beginPath();
-        ctx.moveTo(c1.x, c1.y);
-        ctx.lineTo(c2.x, c2.y);
-        ctx.stroke();
-        ctx.restore();
-
-        // Qubit 1
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(c1.x, c1.y, 7, 0, 2 * Math.PI);
-        ctx.fillStyle = color1;
-        ctx.shadowColor = color1;
-        ctx.shadowBlur = isActive ? 12 : 6;
-        ctx.fill();
-        ctx.restore();
-
-        // Qubit 2
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(c2.x, c2.y, 7, 0, 2 * Math.PI);
-        ctx.fillStyle = color2;
-        ctx.shadowColor = color2;
-        ctx.shadowBlur = isActive ? 12 : 6;
-        ctx.fill();
-        ctx.restore();
-
-        // Active qubit target outline (golden pulsing halo)
-        if (isActive && gameState) {
-            const targetCenter = gameState.activeQubitIndex === 1 ? c1 : c2;
-            const targetColor = gameState.activeQubitIndex === 1 ? color1 : color2;
-            ctx.save();
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 2.5;
-            ctx.shadowColor = targetColor;
-            ctx.shadowBlur = 10;
-            const pulse = 11 + Math.sin(Date.now() / 120) * 2;
-            ctx.beginPath();
-            ctx.arc(targetCenter.x, targetCenter.y, pulse, 0, 2 * Math.PI);
-            ctx.stroke();
-            ctx.restore();
-        }
-
-        // Arrow targets scale/shrink with purity
-        const target1X = c1.x + q1Info.dir[0] * q1Info.purity * CELL_SIZE;
-        const target1Y = c1.y - q1Info.dir[1] * q1Info.purity * CELL_SIZE;
-        const isH1 = Math.abs(q1Info.dir[0] * q1Info.dir[1]) > 0.1;
-        drawArrow(c1.x, c1.y, target1X, target1Y, color1, isH1, q1Info.purity);
-
-        const target2X = c2.x + q2Info.dir[0] * q2Info.purity * CELL_SIZE;
-        const target2Y = c2.y - q2Info.dir[1] * q2Info.purity * CELL_SIZE;
-        const isH2 = Math.abs(q2Info.dir[0] * q2Info.dir[1]) > 0.1;
-        drawArrow(c2.x, c2.y, target2X, target2Y, color2, isH2, q2Info.purity);
-    }
+function drawTargetHalo(game, time) {
+    const { state, x, y } = game.active;
+    if (STATES[state].qubits !== 2) return;
+    const [cx, cy] = cellCenter(x + (game.target === 1 ? 0 : 2), y);
+    ctx.save();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 14 + Math.sin(time / 120) * 1.5, 0, 2 * Math.PI);
+    ctx.stroke();
+    ctx.restore();
 }
 
-function drawGame() {
-    drawGrid();
-
-    if (!gameState) return;
-
-    const activeBlock = gameState.blocks[gameState.blocks.length - 1];
-    if (activeBlock && !gameState.isGameOver) {
-        drawGhostBlock(activeBlock);
+let drawnBoardVersion = -1;
+function render(time) {
+    if (!game || game.boardVersion !== drawnBoardVersion) {
+        drawStatic(game);
+        drawnBoardVersion = game ? game.boardVersion : -1;
     }
-
-    for (let i = 0; i < gameState.blocks.length; i++) {
-        const isActive = (i === gameState.blocks.length - 1);
-        drawBlock(gameState.blocks[i], isActive);
-    }
-
-    document.getElementById('score-val').innerText = gameState.points;
-    if (gameState.points > highscore) {
-        highscore = gameState.points;
-        localStorage.setItem('quantris_highscore', highscore);
-    }
-    document.getElementById('high-score-val').innerText = highscore;
-    document.getElementById('difficulty-val').innerText = (1 / gameState.difficulty).toFixed(2);
-
-    if (activeBlock) {
-        const isTwoQubits = (activeBlock.numQubits === 2);
-        document.getElementById('gate-cx').disabled = !isTwoQubits;
-        document.getElementById('gate-cz').disabled = !isTwoQubits;
-        document.getElementById('gate-ch').disabled = !isTwoQubits;
-
-        const selectorEl = document.getElementById('qubit-selector-container');
-        if (isTwoQubits && !gameState.isGameOver) {
-            selectorEl.style.display = 'flex';
-            document.getElementById('sel-qubit-1').classList.toggle('active', gameState.activeQubitIndex === 1);
-            document.getElementById('sel-qubit-2').classList.toggle('active', gameState.activeQubitIndex === 2);
-        } else {
-            selectorEl.style.display = 'none';
-        }
-    }
-
-    renderPreviews();
+    ctx.drawImage(staticLayer, 0, 0, W, H);
+    if (!game || game.over) return;
+    drawGhost(game);
+    const { state, x, y } = game.active;
+    drawBlock(ctx, state, ...cellCenter(x, y), CELL, { active: true, time });
+    drawTargetHalo(game, time);
 }
+
+// Upcoming-block previews: fixed canvases, redrawn only when the queue changes.
+const PREVIEW_W = 120, PREVIEW_H = 70, PREVIEW_CELL = 22;
+const previews = [1, 2, 3].map(i => {
+    const canvas = document.createElement('canvas');
+    canvas.style.width = `${PREVIEW_W}px`;
+    canvas.style.height = `${PREVIEW_H}px`;
+    document.getElementById(`upcoming-${i}`).appendChild(canvas);
+    return makeCanvas(canvas, PREVIEW_W, PREVIEW_H);
+});
 
 function renderPreviews() {
-    for (let i = 0; i < 3; i++) {
-        const slotEl = document.getElementById(`upcoming-${i + 1}`);
-        slotEl.innerHTML = ''; // Clear
+    previews.forEach((c, i) => {
+        c.clearRect(0, 0, PREVIEW_W, PREVIEW_H);
+        const id = game && game.queue[i];
+        if (id === undefined) return;
+        const st = STATES[id];
+        const minDy = Math.min(...st.cells.map(cell => cell[1]));
+        // centre the shape's bounding box
+        const cx = PREVIEW_W / 2 - ((st.minDx + st.maxDx) / 2) * PREVIEW_CELL;
+        const cy = PREVIEW_H / 2 + ((minDy + st.maxDy) / 2) * PREVIEW_CELL;
+        drawBlock(c, id, cx, cy, PREVIEW_CELL);
+    });
+}
 
-        const previewCanvas = document.createElement('canvas');
-        previewCanvas.width = 120;
-        previewCanvas.height = 70;
-        slotEl.appendChild(previewCanvas);
+// ---------------------------------------------------------------------------
+// UI
+// ---------------------------------------------------------------------------
+const $ = id => document.getElementById(id);
 
-        const pCtx = previewCanvas.getContext('2d');
-        const block = gameState.upcomingBlocks[i];
-        if (!block) continue;
+function loadHighscore() {
+    try { return Number(localStorage.getItem('quantris_highscore')) || 0; } catch { return 0; }
+}
+function saveHighscore(v) {
+    try { localStorage.setItem('quantris_highscore', String(v)); } catch { /* storage unavailable */ }
+}
 
-        pCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-        pCtx.fillRect(0, 0, 120, 70);
+let game = null;
+let speed = DEFAULT_SPEED;
+let highscore = loadHighscore();
+let lastStep = 0;
+let loopId = null;
+let shownSpawn = -1;
 
-        // Center preview drawings
-        const scale = 0.75;
-        pCtx.save();
-        pCtx.scale(scale, scale);
+function updateHud() {
+    $('score-val').textContent = game ? game.points : 0;
+    if (game && game.points > highscore) {
+        highscore = game.points;
+        saveHighscore(highscore);
+    }
+    $('high-score-val').textContent = highscore;
+    $('difficulty-val').textContent = (1 / SPEEDS[speed]).toFixed(2);
+    $('diff-minus').disabled = speed === 0;
+    $('diff-plus').disabled = speed === SPEEDS.length - 1;
 
-        if (block.numQubits === 1) {
-            const cx = 80;
-            const cy = 46;
-            const q = block.stateVector;
-            const color = getQubitColor(q);
+    const twoQubits = !!game && !game.over && STATES[game.active.state].qubits === 2;
+    for (const id of ['gate-cx', 'gate-cz']) $(id).disabled = !twoQubits;
+    $('qubit-selector-container').style.display = twoQubits ? 'flex' : 'none';
+    $('sel-qubit-1').classList.toggle('active', twoQubits && game.target === 1);
+    $('sel-qubit-2').classList.toggle('active', twoQubits && game.target === 2);
 
-            pCtx.beginPath();
-            pCtx.arc(cx, cy, 7, 0, 2 * Math.PI);
-            pCtx.fillStyle = color;
-            pCtx.fill();
-
-            const arrowLength = 25; // Longer preview arrow
-            const arrowDir = [Math.round(q[0]), Math.round(q[1])];
-            const targetX = cx + arrowDir[0] * arrowLength;
-            const targetY = cy - arrowDir[1] * arrowLength;
-            const isH = Math.abs(q[0] * q[1]) > 0.1;
-
-            pCtx.strokeStyle = color;
-            pCtx.fillStyle = color;
-            pCtx.lineWidth = 4;
-            pCtx.beginPath();
-            pCtx.moveTo(cx, cy);
-            pCtx.lineTo(targetX, targetY);
-            pCtx.stroke();
-
-            // Arrow head
-            const angle = Math.atan2(targetY - cy, targetX - cx);
-            pCtx.beginPath();
-            pCtx.moveTo(targetX, targetY);
-            pCtx.lineTo(targetX - 9 * Math.cos(angle - Math.PI/6), targetY - 9 * Math.sin(angle - Math.PI/6));
-            pCtx.lineTo(targetX - 9 * Math.cos(angle + Math.PI/6), targetY - 9 * Math.sin(angle + Math.PI/6));
-            pCtx.closePath();
-            pCtx.fill();
-        } else {
-            const cx1 = 45;
-            const cx2 = 115;
-            const cy = 46;
-
-            const q1Info = getReducedState(block.stateVector, 1);
-            const q2Info = getReducedState(block.stateVector, 2);
-
-            const color1 = getQubitColor(q1Info.dir);
-            const color2 = getQubitColor(q2Info.dir);
-
-            // Connect
-            const avgP = (q1Info.purity + q2Info.purity) / 2;
-            pCtx.strokeStyle = `rgba(155, 93, 229, ${0.4 + (1 - avgP)*0.4})`;
-            pCtx.lineWidth = 2.5;
-            pCtx.setLineDash([3, 3]);
-            pCtx.beginPath();
-            pCtx.moveTo(cx1, cy);
-            pCtx.lineTo(cx2, cy);
-            pCtx.stroke();
-
-            // Qubit 1
-            pCtx.beginPath();
-            pCtx.arc(cx1, cy, 7, 0, 2 * Math.PI);
-            pCtx.fillStyle = color1;
-            pCtx.fill();
-
-            // Qubit 2
-            pCtx.beginPath();
-            pCtx.arc(cx2, cy, 7, 0, 2 * Math.PI);
-            pCtx.fillStyle = color2;
-            pCtx.fill();
-
-            const arrowLength = 25;
-            
-            // Arrow 1
-            const target1X = cx1 + q1Info.dir[0] * q1Info.purity * arrowLength;
-            const target1Y = cy - q1Info.dir[1] * q1Info.purity * arrowLength;
-            if (q1Info.purity > 0.15) {
-                pCtx.strokeStyle = color1;
-                pCtx.fillStyle = color1;
-                pCtx.lineWidth = 4;
-                pCtx.beginPath();
-                pCtx.moveTo(cx1, cy);
-                pCtx.lineTo(target1X, target1Y);
-                pCtx.stroke();
-                const a1 = Math.atan2(target1Y - cy, target1X - cx1);
-                pCtx.beginPath();
-                pCtx.moveTo(target1X, target1Y);
-                pCtx.lineTo(target1X - 9 * Math.cos(a1 - Math.PI/6), target1Y - 9 * Math.sin(a1 - Math.PI/6));
-                pCtx.lineTo(target1X - 9 * Math.cos(a1 + Math.PI/6), target1Y - 9 * Math.sin(a1 + Math.PI/6));
-                pCtx.closePath();
-                pCtx.fill();
-            }
-
-            // Arrow 2
-            const target2X = cx2 + q2Info.dir[0] * q2Info.purity * arrowLength;
-            const target2Y = cy - q2Info.dir[1] * q2Info.purity * arrowLength;
-            if (q2Info.purity > 0.15) {
-                pCtx.strokeStyle = color2;
-                pCtx.fillStyle = color2;
-                pCtx.lineWidth = 4;
-                pCtx.beginPath();
-                pCtx.moveTo(cx2, cy);
-                pCtx.lineTo(target2X, target2Y);
-                pCtx.stroke();
-                const a2 = Math.atan2(target2Y - cy, target2X - cx2);
-                pCtx.beginPath();
-                pCtx.moveTo(target2X, target2Y);
-                pCtx.lineTo(target2X - 9 * Math.cos(a2 - Math.PI/6), target2Y - 9 * Math.sin(a2 - Math.PI/6));
-                pCtx.lineTo(target2X - 9 * Math.cos(a2 + Math.PI/6), target2Y - 9 * Math.sin(a2 + Math.PI/6));
-                pCtx.closePath();
-                pCtx.fill();
-            }
-        }
-        pCtx.restore();
+    if (game && game.spawnCount !== shownSpawn) {
+        shownSpawn = game.spawnCount;
+        renderPreviews();
     }
 }
 
-// Game Loop Timing
-function tick(time) {
-    if (!lastTickTime) lastTickTime = time;
-    const progress = (time - lastTickTime) / 1000;
+// Run a game action, then refresh everything that depends on it.
+function act(fn) {
+    if (!game || game.over) return;
+    fn(game);
+    updateHud();
+    if (game.over) showGameOver();
+}
 
-    if (progress >= gameState.difficulty) {
-        gameState.update();
-        lastTickTime = time;
-
-        if (gameState.isGameOver) {
-            drawGame();
-            showGameOver();
-            return;
-        }
+function frame(time) {
+    if (!lastStep) lastStep = time;
+    if (time - lastStep >= SPEEDS[speed] * 1000) {
+        lastStep = time;
+        act(g => g.step());
     }
-
-    drawGame(); // Redraw on every animation frame for continuous animations
-    gameLoopId = requestAnimationFrame(tick);
+    render(time);
+    if (game && !game.over) loopId = requestAnimationFrame(frame);
 }
 
 function startGame() {
-    if (gameLoopId) {
-        cancelAnimationFrame(gameLoopId);
-    }
-    
-    gameState = new GameState();
-    lastTickTime = 0;
-    
-    // Hide overlay
-    document.getElementById('game-overlay').classList.add('hidden');
-    
-    drawGame();
-    gameLoopId = requestAnimationFrame(tick);
+    if (loopId) cancelAnimationFrame(loopId);
+    game = new Game();
+    shownSpawn = -1;
+    lastStep = 0;
+    $('game-overlay').classList.add('hidden');
+    updateHud();
+    if (game.over) return showGameOver();
+    loopId = requestAnimationFrame(frame);
 }
 
 function showGameOver() {
-    cancelAnimationFrame(gameLoopId);
-    gameLoopId = null;
-
-    document.getElementById('overlay-title').innerText = 'Game Over';
-    document.getElementById('overlay-desc').innerText = `You scored ${gameState.points} points! Ready to try again?`;
-    document.getElementById('btn-start').innerText = 'Play Again';
-    document.getElementById('game-overlay').classList.remove('hidden');
+    cancelAnimationFrame(loopId);
+    loopId = null;
+    render(performance.now());
+    $('overlay-title').textContent = 'Game Over';
+    $('overlay-desc').textContent = `You scored ${game.points} points! Ready to try again?`;
+    $('btn-start').textContent = 'Play Again';
+    $('game-overlay').classList.remove('hidden');
 }
 
-// Difficulty buttons event listeners
-document.getElementById('diff-minus').addEventListener('click', () => {
-    if (gameState) adjustDifficulty(1);
-});
-document.getElementById('diff-plus').addEventListener('click', () => {
-    if (gameState) adjustDifficulty(-1);
-});
+function setTarget(q) {
+    act(g => { g.target = q; });
+}
 
-// Interactive gate buttons
-document.querySelectorAll('.gate-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-        const gate = btn.getAttribute('data-gate');
-        if (gameState) {
-            gameState.handleGateAction(gate);
-            drawGame();
-        }
+// Buttons: blur after click so Space/Enter don't silently repeat the last one.
+function onClick(id, fn) {
+    $(id).addEventListener('click', e => {
+        e.currentTarget.blur();
+        fn();
     });
+}
+
+onClick('btn-start', startGame);
+onClick('diff-minus', () => { speed = Math.max(0, speed - 1); updateHud(); });
+onClick('diff-plus', () => { speed = Math.min(SPEEDS.length - 1, speed + 1); updateHud(); });
+onClick('sel-qubit-1', () => setTarget(1));
+onClick('sel-qubit-2', () => setTarget(2));
+for (const btn of document.querySelectorAll('.gate-btn')) {
+    onClick(btn.id, () => act(g => g.applyGate(btn.dataset.gate)));
+}
+for (const btn of document.querySelectorAll('.move-btn')) {
+    const move = btn.dataset.move;
+    onClick(btn.id, () => act(g => (move === 'down' ? g.step() : g.move(move === 'left' ? -1 : 1))));
+}
+
+const KEYS = {
+    ArrowLeft: g => g.move(-1),
+    ArrowRight: g => g.move(1),
+    ArrowDown: g => g.step(),
+    x: g => g.applyGate('x'),
+    z: g => g.applyGate('z'),
+    h: g => g.applyGate('h'),
+    s: g => g.applyGate('cx'),
+    a: g => g.applyGate('cz'),
+    q: g => { g.target = 3 - g.target; },
+    Tab: g => { g.target = 3 - g.target; },
+};
+
+window.addEventListener('keydown', e => {
+    if (!game || game.over || e.ctrlKey || e.metaKey || e.altKey) return;
+    const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    const handler = KEYS[key];
+    if (!handler) return;
+    e.preventDefault();
+    if (e.repeat && !key.startsWith('Arrow')) return; // holding X shouldn't toggle it back and forth
+    act(handler);
 });
 
-// Target Qubit Selector Buttons
-document.getElementById('sel-qubit-1').addEventListener('click', () => {
-    if (gameState && !gameState.isGameOver) {
-        gameState.activeQubitIndex = 1;
-        drawGame();
-    }
-});
-document.getElementById('sel-qubit-2').addEventListener('click', () => {
-    if (gameState && !gameState.isGameOver) {
-        gameState.activeQubitIndex = 2;
-        drawGame();
-    }
+// How-to-play modal
+const modal = $('how-to-modal');
+onClick('btn-how-to', () => modal.classList.add('active'));
+onClick('modal-close', () => modal.classList.remove('active'));
+modal.addEventListener('click', e => {
+    if (e.target === modal) modal.classList.remove('active');
 });
 
-// Keyboard controls
-window.addEventListener('keydown', (e) => {
-    if (!gameState || gameState.isGameOver) return;
-    
-    const key = e.key.toLowerCase();
-    
-    if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        gameState.handleMoveBlock('left');
-        drawGame();
-    } else if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        gameState.handleMoveBlock('right');
-        drawGame();
-    } else if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        gameState.update();
-        drawGame();
-    } else if (key === 'x') {
-        gameState.handleGateAction('x');
-        drawGame();
-    } else if (key === 'z') {
-        gameState.handleGateAction('z');
-        drawGame();
-    } else if (key === 'h') {
-        gameState.handleGateAction('h');
-        drawGame();
-    } else if (key === 's') { // CX
-        gameState.handleGateAction('cx');
-        drawGame();
-    } else if (key === 'a') { // CZ
-        gameState.handleGateAction('cz');
-        drawGame();
-    } else if (key === 'q' || key === 'tab') {
-        e.preventDefault();
-        gameState.activeQubitIndex = (gameState.activeQubitIndex === 1) ? 2 : 1;
-        drawGame();
-    }
-});
-
-// Start button
-document.getElementById('btn-start').addEventListener('click', startGame);
-
-// Modal dialog helpers
-const modal = document.getElementById('how-to-modal');
-document.getElementById('btn-how-to').addEventListener('click', () => {
-    modal.classList.add('active');
-});
-document.getElementById('modal-close').addEventListener('click', () => {
-    modal.classList.remove('active');
-});
-modal.addEventListener('click', (e) => {
-    if (e.target === modal) {
-        modal.classList.remove('active');
-    }
-});
-
-// Initial draw grid
-drawGrid();
-renderPreviews();
-document.getElementById('high-score-val').innerText = highscore;
+updateHud();
+render(0);

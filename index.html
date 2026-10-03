@@ -38,8 +38,8 @@
                     <h3>Difficulty</h3>
                     <div class="stat-value" id="difficulty-val">1.43</div>
                     <div class="difficulty-controls">
-                        <button class="diff-btn" id="diff-minus" title="Decrease Difficulty">—</button>
-                        <button class="diff-btn" id="diff-plus" title="Increase Difficulty">+</button>
+                        <button class="diff-btn" id="diff-minus" title="Slower">—</button>
+                        <button class="diff-btn" id="diff-plus" title="Faster">+</button>
                     </div>
                 </div>
 
@@ -71,12 +71,17 @@
                         </div>
                     </div>
                 </div>
+                <div class="move-controls">
+                    <button class="move-btn" id="move-left" data-move="left" title="Move left">←</button>
+                    <button class="move-btn" id="move-down" data-move="down" title="Drop one row">↓</button>
+                    <button class="move-btn" id="move-right" data-move="right" title="Move right">→</button>
+                </div>
             </section>
 
             <!-- Right Panel: Quantum Gates -->
             <section class="panel right-panel glass">
                 <h3>Quantum Gates</h3>
-                <p class="panel-desc">Apply gates to rotate the active qubit state vector.</p>
+                <p class="panel-desc">Apply gates to change the falling block's state — and with it, its shape.</p>
                 
                 <div class="qubit-selector-container" id="qubit-selector-container" style="display: none;">
                     <span>Target:</span>
@@ -111,10 +116,6 @@
                             <span class="gate-symbol">CZ</span>
                             <span class="key-hint">Key: A</span>
                         </button>
-                        <button class="gate-btn double" id="gate-ch" data-gate="ch" title="Controlled-Hadamard Gate">
-                            <span class="gate-symbol">CH</span>
-                            <span class="key-hint">Click only</span>
-                        </button>
                     </div>
                 </div>
 
@@ -130,7 +131,7 @@
                     </div>
                     <div class="control-row">
                         <span class="control-key">↓</span>
-                        <span class="control-desc">Fast Fall</span>
+                        <span class="control-desc">Drop One Row</span>
                     </div>
                     <div class="control-row">
                         <span class="control-key">Tab / Q</span>
@@ -157,19 +158,20 @@
                         <h4>1. Qubit Shapes & Grid Alignment</h4>
                         <p>A block is comprised of a <strong>Qubit Center</strong> (a glowing circle) and an <strong>Arrow</strong> indicating its state. The block physically occupies both the center cell and the target cell the arrow points to:</p>
                         <ul>
-                            <li><strong>Arrow Right (Cyan)</strong>: state |0⟩. Covers the center and the cell to its right.</li>
-                            <li><strong>Arrow Up (Blue)</strong>: state |1⟩. Covers the center and the cell above it.</li>
-                            <li><strong>Arrow Diagonal (Purple)</strong>: Superposition state. Covers the center and the cell diagonal to it.</li>
+                            <li><strong>Arrow Right (cyan)</strong>: state |0⟩. Covers the center and the cell to its right.</li>
+                            <li><strong>Arrow Up (violet)</strong>: state |1⟩. Covers the center and the cell above it.</li>
+                            <li><strong>Arrow Diagonal (with a dot)</strong>: superposition, e.g. |+⟩ = (|0⟩+|1⟩)/√2 points up-right (blue). Covers the center and the diagonal cell.</li>
+                            <li>A minus sign flips the arrow: −|0⟩ points left (red), −|1⟩ points down (green).</li>
                         </ul>
                     </div>
                     <div>
                         <h4>2. Applying Quantum Gates</h4>
                         <p>Use keyboard keys or click the gate buttons to rotate/manipulate the falling block's state and physically change its shape:</p>
                         <ul>
-                            <li><strong>X Gate (Key X)</strong>: Pauli-X flips the state. (NOT operation, e.g., swaps |0⟩ ↔ |1⟩).</li>
-                            <li><strong>Z Gate (Key Z)</strong>: Pauli-Z flips the phase (negates the |1⟩ coefficient).</li>
-                            <li><strong>H Gate (Key H)</strong>: Hadamard gate creates/destroys superposition (rotates the arrow by 45°).</li>
-                            <li><strong>CX / CZ / CH</strong>: Entangle and swap states on 2-qubit blocks.</li>
+                            <li><strong>X Gate (Key X)</strong>: swaps |0⟩ ↔ |1⟩ — mirrors the arrow across the 45° diagonal.</li>
+                            <li><strong>Z Gate (Key Z)</strong>: negates the |1⟩ part — mirrors the arrow across the horizontal axis.</li>
+                            <li><strong>H Gate (Key H)</strong>: Hadamard, |0⟩ ↔ |+⟩ and |1⟩ ↔ |−⟩ — mirrors the arrow across the 22.5° line. Combining X, Z and H reaches all 8 directions.</li>
+                            <li><strong>CX (Key S) / CZ (Key A)</strong>: two-qubit gates; they can entangle the qubits of a 2-qubit block.</li>
                             <li><strong>Switch Target (Tab / Q)</strong>: For 2-qubit blocks, toggle gate target between Left (Q1) and Right (Q2), marked by a pulsing white ring.</li>
                         </ul>
                     </div>
@@ -186,33 +188,33 @@
                         </div>
                         <div class="example-item">
                             <h5>Example 2: Phase Flipping for |1⟩ (Vertical Qubits)</h5>
-                            <p>A stationary block is on the board in the |1⟩ state (arrow pointing <strong>Up</strong> ↑). If your falling block is also in the |1⟩ state (↑), they will not cancel. First press **Z** to flip the falling block's phase to -|1⟩ (arrow pointing <strong>Down</strong> ↓). When they touch, they will cancel!</p>
+                            <p>A stationary block is on the board in the |1⟩ state (arrow pointing <strong>Up</strong> ↑). If your falling block is also in the |1⟩ state (↑), they will not cancel. First press <strong>Z</strong> to flip the falling block's phase to -|1⟩ (arrow pointing <strong>Down</strong> ↓). When they touch, they will cancel!</p>
                         </div>
                         <div class="example-item">
                             <h5>Example 3: Superposition & Rotations</h5>
-                            <p>Your falling block points <strong>Up-Right</strong> ↗. Pressing **H** rotates it to point <strong>Right</strong> →. By combining **H** (45° rotation) and **X** (90° reflection), you can rotate your qubit to point in any of the 8 directions to match and cancel a target.</p>
+                            <p>Your falling block points <strong>Up-Right</strong> ↗. Pressing <strong>H</strong> turns it to point <strong>Right</strong> →, since H|+⟩ = |0⟩. By combining <strong>H</strong>, <strong>X</strong> and <strong>Z</strong> you can point your qubit in any of the 8 directions to cancel a target.</p>
                         </div>
                     </div>
                 </div>
 
                 <div class="modal-section">
                     <h4>🔗 Entanglement & Mixed States (2-Qubit Blocks)</h4>
-                    <p>When you apply <strong>CX</strong> (Controlled-X) or <strong>CZ</strong> (Controlled-Z) gates on 2-qubit blocks, the two qubits can become <strong>entangled</strong>. This is visually represented in a scientifically accurate way:</p>
+                    <p>A 2-qubit block has two arrows. One-qubit gates act on the <strong>target</strong> qubit (switch with Tab / Q). The badge on the bridge shows the sign of the whole state: a <strong>+</strong> block and a <strong>−</strong> block with the same arrows cancel when they land in the same place (Z on a qubit in |1⟩ flips the sign).</p>
                     <ul>
-                        <li><strong>Definite vs. Mixed States</strong>: Entangled qubits no longer have independent, definite directions. Their individual states become <em>mixed</em>.</li>
-                        <li><strong>Shrinking Arrows</strong>: As qubits become more entangled, their individual state arrows will <strong>shrink in length</strong>, representing the loss of a definite single-qubit state! If they are maximally entangled (e.g. in a Bell state), the arrows will shrink to a dot, and the connecting dashed line will glow brightly.</li>
-                        <li><strong>Interaction</strong>: Single qubits cannot independently interact with entangled qubits because the entanglement binds the two qubits together. To clear them, you must cancel the joint state as a whole.</li>
+                        <li><strong>Entanglement</strong>: <strong>CX</strong> or <strong>CZ</strong> on a superposition can entangle the two qubits, e.g. (|00⟩+|11⟩)/√2. Entangled qubits have no direction of their own, so the arrows disappear, the block shrinks to its two centres, and the bridge glows.</li>
+                        <li><strong>Clearing</strong>: an entangled block cancels with an entangled block of the opposite sign in the same place. One-qubit and two-qubit blocks never cancel each other.</li>
                     </ul>
                 </div>
 
                 <div class="interference-tip">
                     <h4>💡 Pro Tip: Ghost Block & Block Outlines</h4>
-                    <p>Look at the **Ghost Block** (the dashed outline at the bottom of the grid) to see exactly which cells your block will cover when it lands. Align the shapes first using left/right move keys, then apply quantum gates until the active block's arrows point in the opposite direction of the target block's arrows.</p>
+                    <p>Look at the <strong>ghost block</strong> (the dashed outline below your block) to see exactly which cells your block will cover when it lands. Align the shapes first using left/right move keys, then apply quantum gates until the active block's arrows point in the opposite direction of the target block's arrows.</p>
                 </div>
             </div>
         </div>
     </div>
 
+    <script src="quantum.js"></script>
     <script src="game.js"></script>
 </body>
 </html>

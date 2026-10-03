@@ -12,9 +12,8 @@ Presented by QuanTris: `Caspian Chaharom, Danai Bili, Frederik Hardervig, Sneha 
 
 | What | Where |
 |---|---|
-| Version submitted to iQuHACK 2022 (frozen) | tag [`iquhack-2022-submission`](https://github.com/kazulak/2022_microsoft_ionq_challenge/tree/iquhack-2022-submission) (also the locked branch `submitted-version`) |
+| Version submitted to iQuHACK 2022 (frozen) | tag [`iquhack-2022-submission`](https://github.com/kazulak/2022_microsoft_ionq_challenge/tree/iquhack-2022-submission) (also branch `main`) |
 | This version: the submission with minimal fixes so it runs on Python 3.10+ / pygame 2 without crashing | branch `runnable-minimal` |
-| Further development of the pygame version | branch `development` |
 | Browser game, deployed to GitHub Pages | branch `browser-game` |
 
 The repository is maintained with the help of agentic AI (Antigravity, Claude Code). Everything after the hackathon happens on branches; the submission is never changed.
